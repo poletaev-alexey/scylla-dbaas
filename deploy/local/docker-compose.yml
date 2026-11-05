@@ -1,0 +1,77 @@
+# Hand-run reference of what the `local` Provider driver creates for ONE Cluster.
+# The Control Plane does NOT use this file (it drives the docker CLI itself, see
+# control-plane/src/dbaas/providers/local.py); it exists to debug Scylla Manager / agent /
+# MinIO wiring by hand:
+#
+#   docker compose -f deploy/local/docker-compose.yml up -d --build
+#   docker compose -f deploy/local/docker-compose.yml exec minio mkdir -p /data/dbaas-backups
+#   docker compose -f deploy/local/docker-compose.yml exec scylla-manager \
+#     sctool cluster add --name demo --host 10.213.250.11 --auth-token local-dev-token
+#   docker compose -f deploy/local/docker-compose.yml exec scylla-manager \
+#     sctool backup -c demo -L s3:dbaas-backups
+#
+# Host ports match the driver's layout for slot 250 (port_base 21000 + 20*250).
+x-data-node: &data-node
+  build:
+    context: scylla-agent
+  image: dbaas/scylla-with-agent:2026.1.15-3.13.0
+  volumes:
+    - ./scylla-agent/scylla-manager-agent.yaml:/etc/scylla-manager-agent/scylla-manager-agent.yaml:ro
+  depends_on: [minio]
+
+x-scylla-args: &scylla-args
+  - --smp=1
+  - --memory=750M
+  - --overprovisioned=1
+  - --developer-mode=1
+  - --cluster-name=demo
+  - --seeds=10.213.250.11
+  - --api-address=0.0.0.0
+
+services:
+  data-1:
+    <<: *data-node
+    command: *scylla-args
+    networks: {cluster: {ipv4_address: 10.213.250.11}}
+    ports: ["127.0.0.1:26001:9042", "127.0.0.1:26011:10000"]
+  data-2:
+    <<: *data-node
+    command: *scylla-args
+    networks: {cluster: {ipv4_address: 10.213.250.12}}
+    ports: ["127.0.0.1:26002:9042", "127.0.0.1:26012:10000"]
+  data-3:
+    <<: *data-node
+    command: *scylla-args
+    networks: {cluster: {ipv4_address: 10.213.250.13}}
+    ports: ["127.0.0.1:26003:9042", "127.0.0.1:26013:10000"]
+
+  scylla-manager-db:
+    image: scylladb/scylla:2026.1.15
+    command: --smp 1 --memory 500M --overprovisioned 1 --developer-mode 1
+    networks: {cluster: {ipv4_address: 10.213.250.20}}
+  scylla-manager:
+    image: scylladb/scylla-manager:3.13.0
+    restart: unless-stopped
+    depends_on: [scylla-manager-db]
+    networks: {cluster: {ipv4_address: 10.213.250.21}}
+    ports: ["127.0.0.1:26005:5080"]
+
+  # MinIO no longer ships Docker Hub images; the Scylla Manager docs use this fork.
+  minio:
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: dbaas
+      MINIO_ROOT_PASSWORD: dbaas-minio-secret
+    volumes: [minio-data:/data]
+    networks: {cluster: {}}
+    ports: ["127.0.0.1:29000:9000"]
+
+volumes:
+  minio-data:
+
+networks:
+  cluster:
+    ipam:
+      config:
+        - subnet: 10.213.250.0/24

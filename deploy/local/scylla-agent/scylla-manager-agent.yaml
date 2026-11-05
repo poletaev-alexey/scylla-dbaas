@@ -1,0 +1,11 @@
+# Agent config for the hand-run deploy/local/docker-compose.yml only.
+# The `local` driver generates one per Cluster with a random auth token.
+auth_token: local-dev-token
+scylla:
+  api_address: 127.0.0.1
+  api_port: 10000
+s3:
+  access_key_id: dbaas
+  secret_access_key: dbaas-minio-secret
+  provider: Minio
+  endpoint: http://minio:9000
