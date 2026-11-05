@@ -1,0 +1,201 @@
+# CI for every PR and every push to main.
+#
+# Third-party actions are pinned to full commit SHAs (tag in the trailing comment) so a
+# moved tag cannot change what runs here. No job needs cloud credentials.
+#
+# The `integration` job drives the full Cluster lifecycle on the `local` Provider driver
+# (Docker containers, MinIO) and only runs when the repository variable
+# DBAAS_INTEGRATION is set to "1" (Settings -> Secrets and variables -> Actions -> Variables).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION: "3.12"
+  TERRAFORM_VERSION: "1.17.1"
+  TFLINT_VERSION: "v0.65.0"
+  CHECKOV_VERSION: "3.4.3"
+  NODE_VERSION: "22"
+
+jobs:
+  control-plane:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: control-plane
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: control-plane/pyproject.toml
+      - run: uv venv && uv pip install -e '.[dev]'
+      - name: ruff
+        run: .venv/bin/ruff check src tests
+      - name: mypy (strict)
+        run: .venv/bin/mypy src
+      - name: pytest
+        run: .venv/bin/pytest -q
+
+  cql-client:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cql-client
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: cql-client/pyproject.toml
+      - run: uv venv && uv pip install -e '.[dev]'
+      - name: ruff
+        run: .venv/bin/ruff check src tests && .venv/bin/ruff format --check src tests
+      - name: mypy (strict)
+        run: .venv/bin/mypy src
+      - name: pytest
+        run: .venv/bin/pytest -q
+
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff infra
+      - name: terraform validate (base, cluster)
+        run: |
+          for stack in infra/base infra/cluster; do
+            echo "::group::validate $stack"
+            terraform -chdir="$stack" init -backend=false -input=false
+            terraform -chdir="$stack" validate
+            echo "::endgroup::"
+          done
+      - name: tflint
+        working-directory: infra
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # avoids rate limits when downloading plugins
+        run: |
+          tflint --init --config "$GITHUB_WORKSPACE/.github/tflint.hcl"
+          tflint --recursive --config "$GITHUB_WORKSPACE/.github/tflint.hcl" --format=compact
+      - name: checkov (soft fail)
+        # Report-only: findings go to the job summary but never fail the build. The
+        # public-subnet / operator-IP design (ADR-0004) is a known, documented trade-off.
+        run: |
+          pipx install --quiet "checkov==${CHECKOV_VERSION}"
+          set +e
+          checkov --directory infra --framework terraform --quiet --compact \
+            --soft-fail --output cli > checkov.txt 2>&1
+          {
+            echo "## Checkov (soft fail)"
+            echo
+            echo '```'
+            tail -n 200 checkov.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: control-plane
+            context: control-plane
+            dockerfile: control-plane/Dockerfile
+          - image: ui
+            context: ui
+            dockerfile: ui/Dockerfile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: build ${{ matrix.image }} (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: scylla-dbaas/${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  integration:
+    # Full lifecycle (create -> backup -> delete -> restore) on the `local` driver.
+    if: vars.DBAAS_INTEGRATION == '1'
+    needs: [control-plane, cql-client]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DBAAS_INTEGRATION: "1"
+      DBAAS_PROVIDER: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+      - name: Prepare host for ScyllaDB containers
+        # ScyllaDB uses Linux AIO; the default fs.aio-max-nr is too low for 3+ nodes.
+        run: sudo sysctl -w fs.aio-max-nr=1048576
+      - name: Install control-plane and cql-client
+        run: |
+          (cd control-plane && uv venv && uv pip install -e '.[dev]')
+          (cd cql-client && uv venv && uv pip install -e '.[dev]')
+      - name: pytest -m integration
+        working-directory: control-plane
+        run: .venv/bin/pytest -m integration -v tests/integration
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          docker ps -a
+          for c in $(docker ps -aq); do
+            echo "::group::$(docker inspect -f '{{.Name}}' "$c")"
+            docker logs --tail 200 "$c" 2>&1 || true
+            echo "::endgroup::"
+          done
+      - name: Remove leftover containers
+        if: always()
+        run: docker ps -aq | xargs -r docker rm -f
