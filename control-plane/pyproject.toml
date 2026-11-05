@@ -49,3 +49,6 @@ plugins = ["pydantic.mypy"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: needs Docker; runs the local driver end to end (set DBAAS_INTEGRATION=1)",
+]

@@ -1,0 +1,41 @@
+# Control Plane + UI dev stack (ADR-0001).
+#
+#   docker compose up --build            # fake provider: whole lifecycle simulated
+#   DBAAS_PROVIDER=aws docker compose up # real AWS (needs ~/.aws and the base stack)
+#
+# The `local` driver publishes Cluster ports on the host's 127.0.0.1, which a container
+# cannot reach; with DBAAS_PROVIDER=local run the Control Plane on the host instead:
+#   cd control-plane && DBAAS_PROVIDER=local .venv/bin/uvicorn dbaas.main:app
+# and start only the UI here: `docker compose up ui`.
+services:
+  control-plane:
+    build:
+      context: .
+      dockerfile: control-plane/Dockerfile
+    image: dbaas-control-plane:dev
+    environment:
+      DBAAS_PROVIDER: ${DBAAS_PROVIDER:-fake}
+      DBAAS_API_KEYS: ${DBAAS_API_KEYS:-dev-key:dev}
+      DBAAS_OPERATOR_CIDR: ${DBAAS_OPERATOR_CIDR:-0.0.0.0/32}
+      DBAAS_TERRAFORM_STATE_BUCKET: ${DBAAS_TERRAFORM_STATE_BUCKET:-}
+      DBAAS_BACKUP_BUCKET: ${DBAAS_BACKUP_BUCKET:-}
+      AWS_PROFILE: ${AWS_PROFILE:-}
+      AWS_REGION: ${AWS_REGION:-eu-central-1}
+    volumes:
+      - cp-data:/data
+      - ${HOME}/.aws:/home/dbaas/.aws:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  ui:
+    build:
+      context: ui
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    image: dbaas-ui:dev
+    depends_on: [control-plane]
+    ports:
+      - "127.0.0.1:8080:80"
+
+volumes:
+  cp-data:
