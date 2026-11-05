@@ -25,7 +25,13 @@ class ScyllaRestClient:
         timeout: float = 5.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        host = f"[{address}]" if ":" in address else address
+        """``address`` is an IPv4/hostname, optionally ``host:port`` (overrides ``port``),
+        e.g. a host-published port of the local driver."""
+        host, sep, explicit_port = address.rpartition(":")
+        if not sep:
+            host = address
+        else:
+            port = int(explicit_port)
         self.address = address
         self._http = httpx.AsyncClient(
             base_url=f"http://{host}:{port}", timeout=timeout, transport=transport
