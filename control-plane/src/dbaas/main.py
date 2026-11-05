@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 from dbaas.api.routes import router
@@ -14,8 +15,9 @@ from dbaas.config import Settings, get_settings
 from dbaas.db import Database
 from dbaas.operations.handlers import HANDLERS
 from dbaas.operations.health import HealthChecker
-from dbaas.operations.runner import OperationRunner
+from dbaas.operations.runner import OperationConflict, OperationRunner
 from dbaas.providers.base import Provider
+from dbaas.schemas import Problem
 
 REQUESTS = Counter("dbaas_http_requests_total", "HTTP requests", ["method", "route", "status"])
 LATENCY = Histogram("dbaas_http_request_seconds", "HTTP latency", ["method", "route"])
@@ -102,6 +104,11 @@ def create_app(
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> Response:
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+    @app.exception_handler(OperationConflict)
+    async def conflict(_: Request, exc: OperationConflict) -> JSONResponse:
+        body = Problem(detail=str(exc), active_operation_id=exc.active.id)
+        return JSONResponse(body.model_dump(), status_code=409)
 
     app.include_router(router)
     return app

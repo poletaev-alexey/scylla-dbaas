@@ -7,7 +7,9 @@ from typing import Any, ClassVar
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from dbaas.domain import (
     AuditResult,
@@ -39,9 +41,26 @@ def enum_col[E: StrEnum](enum: type[E]) -> SAEnum:
     )
 
 
+class UTCDateTime(TypeDecorator[datetime]):
+    """SQLite drops tz info; always hand back aware UTC datetimes."""
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: Dialect) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
+        return value
+
+    def process_result_value(self, value: datetime | None, dialect: Dialect) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
+        return value
+
+
 class Base(DeclarativeBase):
     type_annotation_map: ClassVar[dict[Any, Any]] = {
-        datetime: DateTime(timezone=True),
+        datetime: UTCDateTime(),
         dict[str, Any]: JSON,
     }
 

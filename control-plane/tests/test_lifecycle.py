@@ -19,6 +19,7 @@ async def test_create_cluster_becomes_healthy(env: Env) -> None:
     assert sorted(n["name"] for n in c["nodes"]) == ["data-1", "data-2", "data-3", "monitor"]
     assert all(n["status"] == "up" for n in c["nodes"])
     assert c["grafana_url"].endswith(":3000")
+    assert c["created_at"].endswith(("Z", "+00:00"))
 
     ops = (await env.client.get(f"/api/v1/operations?cluster_id={cid}")).json()
     assert ops[0]["type"] == "create_cluster" and ops[0]["status"] == "succeeded"
@@ -52,6 +53,7 @@ async def test_one_operation_per_cluster(env: Env) -> None:
     r1 = await env.client.post(f"/api/v1/clusters/{cid}/rolling-restart")
     r2 = await env.client.post(f"/api/v1/clusters/{cid}/backups")
     assert r1.status_code == 202 and r2.status_code == 409
+    assert r2.json()["active_operation_id"] == r1.json()["operation"]["id"]
     await env.wait()
 
 

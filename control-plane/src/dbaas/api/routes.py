@@ -73,7 +73,7 @@ async def _submit(
             active_operation_id=e.active.id,
         )
         await s.commit()
-        raise HTTPException(409, detail=str(e)) from e
+        raise  # rendered as 409 Problem by the handler in main.py
     if cluster is not None:
         await s.refresh(cluster)
     return Accepted(
