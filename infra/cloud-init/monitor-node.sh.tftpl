@@ -1,0 +1,78 @@
+#!/bin/bash
+# Monitor Node bootstrap (cloud-init user_data, rendered by infra/cluster with templatefile).
+# Runs Scylla Manager (+ its own single-node ScyllaDB backend) and the Scylla Monitoring
+# Stack (Prometheus, Grafana, Alertmanager, Loki + promtail) in Docker. Stores no Cluster data.
+#
+# Cluster: ${cluster_id} ("${cluster_name}")
+set -euo pipefail
+exec > >(tee -a /var/log/dbaas-bootstrap.log) 2>&1
+echo "dbaas: bootstrap of monitor started at $(date -Is)"
+
+export DEBIAN_FRONTEND=noninteractive
+MONITOR_IP="${monitor_ip}"
+
+retry() {
+  local n=$1; shift
+  for i in $(seq 1 "$n"); do "$@" && return 0; echo "retry $i/$n: $*" >&2; sleep 10; done
+  return 1
+}
+
+retry 5 apt-get update -q
+retry 5 apt-get install -y -q docker.io curl jq
+systemctl enable --now docker
+
+# --- Scylla Manager ------------------------------------------------------------------------
+# https://manager.docs.scylladb.com/stable/docker/index.html
+# https://manager.docs.scylladb.com/stable/config/scylla-manager-config.html
+mkdir -p /etc/scylla-manager /var/lib/scylla-manager-db
+cat > /etc/scylla-manager/scylla-manager.yaml <<'EOF'
+http: 0.0.0.0:5080
+prometheus: ':5090'
+database:
+  hosts:
+    - scylla-manager-db
+EOF
+docker network create scylla-manager || true
+retry 5 docker pull "scylladb/scylla:${scylla_version}"
+retry 5 docker pull "scylladb/scylla-manager:${manager_version}"
+docker run -d --name scylla-manager-db --network scylla-manager --restart unless-stopped \
+  -v /var/lib/scylla-manager-db:/var/lib/scylla \
+  "scylladb/scylla:${scylla_version}" --smp 1 --memory 1G --overprovisioned 1 --developer-mode 1
+# Manager retries until its backend is up; --restart covers the first-start race.
+docker run -d --name scylla-manager --network scylla-manager --restart unless-stopped \
+  -p 5080:5080 -p 5090:5090 \
+  -v /etc/scylla-manager/scylla-manager.yaml:/etc/scylla-manager/scylla-manager.yaml:ro \
+  "scylladb/scylla-manager:${manager_version}"
+
+# --- Scylla Monitoring Stack ---------------------------------------------------------------
+# https://monitoring.docs.scylladb.com/stable/install/monitoring-stack.html
+cd /opt
+retry 5 curl -fsSL -o scylla-monitoring.tar.gz \
+  "https://github.com/scylladb/scylla-monitoring/archive/${monitoring_version}.tar.gz"
+tar -xzf scylla-monitoring.tar.gz
+cd "scylla-monitoring-${monitoring_version}"
+
+# Targets are the Data Nodes' ENI private IPs: they survive Node Replacement unchanged.
+# 'cluster' must match the name registered in Scylla Manager; 'dc' the Ec2Snitch DC name.
+cat > prometheus/scylla_servers.yml <<'EOF'
+- targets:
+%{ for ip in data_ips ~}
+    - ${ip}
+%{ endfor ~}
+  labels:
+    cluster: ${jsonencode(cluster_name)}
+    dc: ${scylla_dc}
+EOF
+cat > prometheus/scylla_manager_servers.yml <<EOF
+- targets:
+    - $MONITOR_IP:5090
+EOF
+
+mkdir -p /var/lib/scylla-monitoring/prometheus
+chmod 0777 /var/lib/scylla-monitoring/prometheus # Prometheus container runs as nobody
+# Loki + promtail start by default; promtail's syslog receiver listens on :1514 and the
+# Data Nodes forward Scylla's journal there via rsyslog (scylla_setup --rsyslog-server).
+./start-all.sh -d /var/lib/scylla-monitoring/prometheus --auto-restart
+
+mkdir -p /var/lib/dbaas && date -Is > /var/lib/dbaas/bootstrap-done
+echo "dbaas: bootstrap of monitor finished at $(date -Is)"

@@ -1,0 +1,138 @@
+#!/bin/bash
+# Data Node bootstrap (cloud-init user_data, rendered by infra/cluster with templatefile).
+# Runs once per instance. Installs a pinned ScyllaDB release, configures scylla.yaml,
+# runs scylla_setup (NVMe RAID0 + XFS), Scylla Manager Agent, and log shipping to the
+# Monitor Node's Loki (promtail syslog receiver on :1514).
+#
+# Node:        ${node_name} of Cluster ${cluster_id}
+# Replacing:   "${replace_host_id}" (empty = normal first boot)
+set -euo pipefail
+exec > >(tee -a /var/log/dbaas-bootstrap.log) 2>&1
+echo "dbaas: bootstrap of ${node_name} started at $(date -Is)"
+
+export DEBIAN_FRONTEND=noninteractive
+REGION="${region}"
+SECRET_ID="${secret_id}"
+SCYLLA_VERSION="${scylla_version}"
+PRIVATE_IP="${private_ip}"
+PUBLIC_IP="${public_ip}"
+MONITOR_IP="${monitor_ip}"
+
+retry() { # retry <attempts> <cmd...>
+  local n=$1; shift
+  for i in $(seq 1 "$n"); do "$@" && return 0; echo "retry $i/$n: $*" >&2; sleep 10; done
+  return 1
+}
+
+wait_port() { # wait_port <host> <port> <timeout-seconds>
+  local deadline=$(( $(date +%s) + $3 ))
+  until nc -z -w 3 "$1" "$2"; do
+    [ "$(date +%s)" -lt "$deadline" ] || { echo "timeout waiting for $1:$2"; return 1; }
+    sleep 10
+  done
+}
+
+# --- Prerequisites ------------------------------------------------------------------------
+retry 5 apt-get update -q
+retry 5 apt-get install -y -q curl gnupg jq netcat-openbsd
+retry 5 snap install aws-cli --classic
+AWS=/snap/bin/aws
+
+SECRET_JSON=$(retry 10 $AWS secretsmanager get-secret-value --region "$REGION" \
+  --secret-id "$SECRET_ID" --query SecretString --output text)
+AGENT_TOKEN=$(jq -r .agent_auth_token <<<"$SECRET_JSON")
+CQL_PASSWORD=$(jq -r .password <<<"$SECRET_JSON")
+
+# --- ScyllaDB and Manager repositories (official, Ubuntu 24.04) ----------------------------
+# https://docs.scylladb.com/manual/stable/getting-started/install-scylla/install-on-linux.html
+mkdir -p /etc/apt/keyrings
+gpg --homedir /tmp --no-default-keyring --keyring /tmp/scylla-temp.gpg \
+  --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys c503c686b007f39e a43e06657bac99e3
+gpg --homedir /tmp --no-default-keyring --keyring /tmp/scylla-temp.gpg --export \
+  | gpg --dearmor --yes -o /etc/apt/keyrings/scylladb.gpg
+curl -fsSL -o /etc/apt/sources.list.d/scylla.list \
+  "https://downloads.scylladb.com/deb/debian/scylla-${scylla_series}.list"
+curl -fsSL -o /etc/apt/sources.list.d/scylla-manager.list \
+  "https://downloads.scylladb.com/deb/debian/scylladb-manager-${manager_series}.list"
+retry 5 apt-get update -q
+
+# Pin the exact patch release: a replacing node must run the same release as its peers.
+PKG_VERSION=$(apt-cache madison scylla | awk '{print $3}' | grep "^$SCYLLA_VERSION-" | head -n1)
+[ -n "$PKG_VERSION" ] || { echo "scylla $SCYLLA_VERSION not found in repo"; exit 1; }
+retry 3 apt-get install -y -q \
+  scylla="$PKG_VERSION" scylla-server="$PKG_VERSION" scylla-kernel-conf="$PKG_VERSION" \
+  scylla-node-exporter="$PKG_VERSION" scylla-conf="$PKG_VERSION" scylla-python3="$PKG_VERSION"
+apt-mark hold scylla scylla-server scylla-kernel-conf scylla-node-exporter scylla-conf scylla-python3
+retry 3 apt-get install -y -q scylla-manager-agent
+
+# --- scylla.yaml ---------------------------------------------------------------------------
+# Edited with Scylla's bundled Python (ships PyYAML) so keys are replaced, not duplicated.
+/opt/scylladb/python3/bin/python3 - <<'PY'
+import yaml
+
+path = "/etc/scylla/scylla.yaml"
+with open(path) as f:
+    cfg = yaml.safe_load(f) or {}
+
+cfg.update({
+    "cluster_name": "${cluster_id}",
+    "seed_provider": [{
+        "class_name": "org.apache.cassandra.locator.SimpleSeedProvider",
+        "parameters": [{"seeds": "${seeds}"}],
+    }],
+    "listen_address": "${private_ip}",
+    "broadcast_address": "${private_ip}",
+    "rpc_address": "0.0.0.0",
+    # Clients on the operator's laptop (ADR-0001/0004) must learn public addresses.
+    "broadcast_rpc_address": "${public_ip}",
+    # Scylla REST API reachable by the Control Plane; port 10000 is SG-restricted.
+    "api_address": "0.0.0.0",
+    "endpoint_snitch": "Ec2Snitch",
+    "authenticator": "PasswordAuthenticator",
+    "authorizer": "CassandraAuthorizer",
+    # Local-only CQL socket used once to create the first superuser (no default superuser).
+    "maintenance_socket": "workdir",
+})
+replace_host_id = "${replace_host_id}"
+if replace_host_id:
+    cfg["replace_node_first_boot"] = replace_host_id
+
+with open(path, "w") as f:
+    yaml.safe_dump(cfg, f, default_flow_style=False, sort_keys=False)
+PY
+
+# --- scylla_setup: RAID0 + XFS on the instance-store NVMe, NIC tuning, io.conf, rsyslog ----
+DISKS=$(lsblk -dpno NAME,MODEL | awk '/Instance Storage/ {print $1}' | paste -sd, -)
+[ -n "$DISKS" ] || { echo "no NVMe instance storage found"; exit 1; }
+NIC=$(ip -o -4 route show to default | awk '{print $5; exit}')
+scylla_setup --disks "$DISKS" --online-discard 1 --nic "$NIC" --setup-nic-and-disks \
+  --no-ec2-check --rsyslog-server "$MONITOR_IP:1514"
+
+# --- Scylla Manager Agent ------------------------------------------------------------------
+# https://manager.docs.scylladb.com/stable/install-scylla-manager-agent.html
+# S3 credentials come from the instance role; region is set explicitly.
+cat > /etc/scylla-manager-agent/scylla-manager-agent.yaml <<EOF
+auth_token: $AGENT_TOKEN
+s3:
+  region: $REGION
+EOF
+scyllamgr_agent_setup -y
+
+# --- Join the Cluster ----------------------------------------------------------------------
+%{ for ip in wait_for_ips ~}
+echo "waiting for earlier Data Node ${ip} to serve CQL"
+wait_port "${ip}" 9042 2700
+%{ endfor ~}
+systemctl start scylla-server
+wait_port 127.0.0.1 9042 2700
+
+%{ if bootstrap_superuser ~}
+# First node of a new Cluster: create the CQL superuser over the maintenance socket.
+# https://docs.scylladb.com/manual/stable/operating-scylla/security/create-superuser.html
+retry 30 cqlsh /var/lib/scylla/cql.m -e \
+  "CREATE ROLE IF NOT EXISTS ${cql_user} WITH SUPERUSER = true AND LOGIN = true AND PASSWORD = '$CQL_PASSWORD';"
+%{ endif ~}
+
+systemctl enable --now scylla-manager-agent
+mkdir -p /var/lib/dbaas && date -Is > /var/lib/dbaas/bootstrap-done
+echo "dbaas: bootstrap of ${node_name} finished at $(date -Is) (public $PUBLIC_IP, private $PRIVATE_IP)"
