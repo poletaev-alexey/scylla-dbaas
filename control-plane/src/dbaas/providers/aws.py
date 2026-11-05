@@ -17,7 +17,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib
-import inspect
 import json
 import os
 import shutil
@@ -424,16 +423,17 @@ class AwsInfrastructure:
             await self._wait_ready([new], log)
             return new
 
-    async def recreate_monitor(self, cluster_id: str, log: StepLog) -> NodeInfo:
+    async def recreate_monitor(self, cluster_id: str, log: StepLog) -> ClusterInfra:
         async with self._lock(cluster_id):
             tfvars = self._write_tfvars(cluster_id, None)
             await self._init(cluster_id, log)
             await log("terraform apply -replace for the Monitor Node")
             await self._apply(cluster_id, tfvars, log, ["-replace=aws_instance.monitor"])
             after = await self._outputs(cluster_id)
-            mon = after.monitor
-            await self._wait_ready([mon], log)
-            return mon
+            await log("waiting for Scylla Manager on the new Monitor Node")
+            await self._wait_ready([after.monitor], log)
+            # The Elastic IP is kept, so grafana_url/manager_url normally do not change.
+            return after
 
     async def describe(self, cluster_id: str) -> list[NodeInfo]:
         return await asyncio.to_thread(self._describe_sync, cluster_id)
@@ -473,90 +473,39 @@ class AwsInfrastructure:
         return [info for _, info in sorted(best.values(), key=lambda x: x[1].name)]
 
     async def get_credentials(self, credentials_ref: str) -> Credentials:
-        return await asyncio.to_thread(self._get_credentials_sync, credentials_ref)
-
-    def _get_credentials_sync(self, credentials_ref: str) -> Credentials:
-        sm = self._client("secretsmanager", self.cfg.region)
-        secret = json.loads(sm.get_secret_value(SecretId=credentials_ref)["SecretString"])
+        secret = await self._read_secret(credentials_ref)
         return Credentials(username=str(secret["username"]), password=str(secret["password"]))
 
+    async def agent_auth_token(self, infra: ClusterInfra) -> str:
+        """Scylla Manager Agent auth token of the Cluster (same secret as the CQL password)."""
+        secret = await self._read_secret(infra.credentials_ref)
+        return str(secret["agent_auth_token"])
 
-# --- Restarting Scylla without SSH (used by ManagerClusterOps.rolling_restart) -------------
+    async def cluster_credentials(self, infra: ClusterInfra) -> Credentials | None:
+        return await self.get_credentials(infra.credentials_ref)
 
+    async def _read_secret(self, secret_id: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self._read_secret_sync, secret_id)
 
-class SsmScyllaRestarter:
-    """Restarts ``scylla-server`` on a Data Node through SSM Run Command (ADR-0004: no SSH)."""
-
-    def __init__(
-        self,
-        region: str,
-        *,
-        client_factory: Callable[[str, str], Any] = _boto3_client,
-        poll_seconds: float = 5.0,
-        timeout_seconds: float = 600.0,
-    ) -> None:
-        self.region = region
-        self._client = client_factory
-        self.poll_seconds = poll_seconds
-        self.timeout_seconds = timeout_seconds
-
-    async def __call__(self, node: NodeInfo) -> None:
-        ssm = self._client("ssm", self.region)
-        resp = await asyncio.to_thread(
-            ssm.send_command,
-            InstanceIds=[node.instance_id],
-            DocumentName="AWS-RunShellScript",
-            Parameters={"commands": ["systemctl restart scylla-server"]},
-            Comment=f"dbaas rolling restart {node.name}",
-        )
-        command_id = resp["Command"]["CommandId"]
-        deadline = time.monotonic() + self.timeout_seconds
-        while True:
-            await asyncio.sleep(self.poll_seconds)
-            try:
-                inv = await asyncio.to_thread(
-                    ssm.get_command_invocation, CommandId=command_id, InstanceId=node.instance_id
-                )
-            except Exception as e:  # InvocationDoesNotExist right after send_command
-                if "InvocationDoesNotExist" not in str(e):
-                    raise
-                inv = {"Status": "Pending"}
-            status = inv.get("Status")
-            if status == "Success":
-                return
-            if status in ("Cancelled", "TimedOut", "Failed", "Cancelling"):
-                raise RuntimeError(
-                    f"SSM restart of {node.name} {status}: {inv.get('StandardErrorContent', '')}"
-                )
-            if time.monotonic() > deadline:
-                raise TimeoutError(f"SSM restart of {node.name} did not finish")
-
-
-def _manager_ops(settings: Settings, infra: AwsInfrastructure) -> ClusterOps:
-    """Build the shared ``ManagerClusterOps`` (owned by the scylla-ops agent).
-
-    Its constructor is not part of the Provider contract, so only the keyword arguments it
-    declares are passed from the candidates below.
-    """
-    # Lazy and untyped on purpose: the module is owned by another agent and optional here.
-    manager_cluster_ops: Any = importlib.import_module("dbaas.scylla.ops").ManagerClusterOps
-
-    restarter = SsmScyllaRestarter(settings.aws_region)
-    candidates: dict[str, object] = {
-        "settings": settings,
-        "restart": restarter,
-        "restart_node": restarter,
-        "restarter": restarter,
-        "get_credentials": infra.get_credentials,
-        "credentials": infra.get_credentials,
-        "infra": infra,
-    }
-    params = inspect.signature(manager_cluster_ops).parameters
-    kwargs = {k: v for k, v in candidates.items() if k in params}
-    ops: ClusterOps = manager_cluster_ops(**kwargs)
-    return ops
+    def _read_secret_sync(self, secret_id: str) -> dict[str, Any]:
+        sm = self._client("secretsmanager", self.cfg.region)
+        secret: dict[str, Any] = json.loads(sm.get_secret_value(SecretId=secret_id)["SecretString"])
+        return secret
 
 
 def build(settings: Settings, ops: ClusterOps | None = None) -> Provider:
+    """``aws`` Provider: Terraform/EC2 infrastructure + the shared ``ManagerClusterOps``
+    (Scylla Manager API, SSM restarts, S3 Backup deletion)."""
     infra = AwsInfrastructure(AwsConfig.from_settings(settings))
-    return Provider("aws", infra, ops if ops is not None else _manager_ops(settings, infra))
+    if ops is None:
+        from dbaas.scylla.objectstore import S3ObjectStore
+        from dbaas.scylla.ops import ManagerClusterOps
+        from dbaas.scylla.restart import ssm_restarter
+
+        ops = ManagerClusterOps(
+            auth_token=infra.agent_auth_token,
+            restarter=ssm_restarter(settings.aws_region),
+            credentials=infra.cluster_credentials,
+            object_store=S3ObjectStore(region=settings.aws_region),
+        )
+    return Provider("aws", infra, ops)

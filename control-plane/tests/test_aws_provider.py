@@ -26,12 +26,11 @@ from dbaas.domain import NodeRole
 from dbaas.providers.aws import (
     AwsConfig,
     AwsInfrastructure,
-    SsmScyllaRestarter,
     TerraformError,
     ThrottledLog,
     build,
 )
-from dbaas.providers.base import InstanceState, NodeInfo
+from dbaas.providers.base import ClusterInfra, InstanceState
 from dbaas.providers.fake import FakeClusterOps, FakeWorld
 
 REGION = "eu-central-1"
@@ -249,11 +248,13 @@ async def test_replace_node_rejects_monitor(tmp_path: Path, fake_tf: FakeTf) -> 
 
 
 async def test_recreate_monitor_replaces_only_monitor(tmp_path: Path, fake_tf: FakeTf) -> None:
-    mon = await _infra(tmp_path).recreate_monitor("c-1", Recorder())
+    result = await _infra(tmp_path).recreate_monitor("c-1", Recorder())
     apply = next(c for c in fake_tf.calls() if "apply" in c["args"])
     assert "-replace=aws_instance.monitor" in apply["args"]
     assert apply["tfvars"]["cluster_name"] == "c-1"  # no prior provision in this work dir
-    assert mon.role is NodeRole.MONITOR
+    assert result.monitor.role is NodeRole.MONITOR
+    assert result.manager_url == "http://198.51.100.10:5080"
+    assert len(result.data_nodes) == 3
 
 
 async def test_destroy_runs_destroy_and_removes_work_dir(tmp_path: Path, fake_tf: FakeTf) -> None:
@@ -413,19 +414,32 @@ def test_build_combines_infra_with_given_ops(tmp_path: Path) -> None:
     assert p.infra.cfg.state_bucket == "st"
 
 
-def test_build_uses_manager_cluster_ops_when_available(tmp_path: Path) -> None:
-    pytest.importorskip("dbaas.scylla.ops")
+def test_build_wires_manager_cluster_ops(tmp_path: Path) -> None:
+    from dbaas.scylla.objectstore import S3ObjectStore
+    from dbaas.scylla.ops import ManagerClusterOps
+
     p = build(Settings(provider="aws", terraform_dir=str(tmp_path)))
-    assert type(p.ops).__name__ == "ManagerClusterOps"
+    assert isinstance(p.ops, ManagerClusterOps)
+    assert isinstance(p.ops._store, S3ObjectStore)
+    assert p.ops._restarter is not None
 
 
-async def test_ssm_restarter_runs_shell_command(aws: None) -> None:
-    ec2 = boto3.client("ec2", region_name=REGION)
-    ami = ec2.describe_images()["Images"][0]["ImageId"]
-    iid = _run(ec2, ami, "c-1", "data-1")
-    node = NodeInfo("data-1", NodeRole.DATA, iid, InstanceState.RUNNING)
-    await SsmScyllaRestarter(REGION, poll_seconds=0.0)(node)
-    ssm = boto3.client("ssm", region_name=REGION)
-    [cmd] = ssm.list_commands(InstanceId=iid)["Commands"]
-    assert cmd["DocumentName"] == "AWS-RunShellScript"
-    assert cmd["Parameters"]["commands"] == ["systemctl restart scylla-server"]
+async def test_secret_resolvers_for_manager(tmp_path: Path, aws: None) -> None:
+    sm = boto3.client("secretsmanager", region_name=REGION)
+    arn = sm.create_secret(
+        Name="dbaas/c-1/cql",
+        SecretString=json.dumps(
+            {"username": "scylla", "password": "s3cret", "agent_auth_token": "tok"}
+        ),
+    )["ARN"]
+    view = ClusterInfra(
+        nodes=[],
+        grafana_url="",
+        manager_url="",
+        credentials_ref=arn,
+        backup_location="s3:b/clusters/c-1",
+    )
+    infra = _infra(tmp_path)
+    assert await infra.agent_auth_token(view) == "tok"
+    creds = await infra.cluster_credentials(view)
+    assert creds is not None and creds.password == "s3cret"

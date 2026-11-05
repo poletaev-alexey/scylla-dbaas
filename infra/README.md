@@ -91,7 +91,8 @@ The dead node's Host ID is read by the driver from a live peer's Scylla REST API
 * **Auth:** ScyllaDB has no default superuser. `data-1` creates `scylla` (password from the
   Cluster secret) once over the local maintenance socket (`maintenance_socket: workdir`).
 * **Secret `dbaas/<id>/cql`** is JSON `{username, password, agent_auth_token}`. Scylla Manager
-  needs `agent_auth_token` when the Cluster is registered.
+  needs `agent_auth_token` when the Cluster is registered; `providers/aws.py` `build()` hands
+  it (and the CQL credentials) to `ManagerClusterOps` by reading this secret.
 * **Backup location:** Scylla Manager accepts only `s3:<bucket>` (no path) and writes to
   `backup/{meta,schema,sst}/cluster/<manager cluster id>/…`. The stack outputs both
   `backup_location` (`s3:<bucket>/clusters/<id>`, as stored by the Control Plane) and
