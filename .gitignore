@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+# Data / secrets
+*.db
+*.sqlite
+.env
+.env.*
+!.env.example
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+.terraform.lock.hcl.bak
+# Node
+node_modules/
+dist/
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/

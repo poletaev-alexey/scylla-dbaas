@@ -1,0 +1,8 @@
+# Where the AI was wrong
+
+| # | What happened | How it was caught | Fix |
+|---|---|---|---|
+| 1 | Enum-typed columns were declared as `String`, so values came back as `str` and every `status is ClusterStatus.X` check was silently false (7 of 13 tests failed). | First test run. | `enum_col()` helper using SQLAlchemy `Enum(native_enum=False)`. |
+| 2 | After `session.rollback()` the code read attributes of expired ORM objects; async SQLAlchemy cannot lazy-load, so the failure handler itself crashed and a Cluster stayed `provisioning` instead of `failed`. | Test `test_failed_provisioning_marks_cluster_failed` + a "coroutine never awaited" warning. | Cache ids before handlers run; `refresh()` after rollback. |
+| 3 | Race: when Auto-recovery cancelled a Backup during a `commit()` that sat outside the `try`, the Backup row stayed `running` forever. Tests passed 8/10 times. | Running the suite in a loop (10×) instead of trusting one green run. | Whole Backup body inside `try`; failure marked via a fresh session; verified 30/30. |
+| 4 | Plan deck was started before the code, but the human wanted code first ("может код сначала?"). | Human interrupted mid-turn. | Deck paused at 7/13 slides; code work started. |
