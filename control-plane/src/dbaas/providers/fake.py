@@ -114,8 +114,9 @@ class FakeInfrastructure:
         await self.w.step(log, f"{node_name} joined with replace_node_first_boot")
         return new
 
-    async def recreate_monitor(self, cluster_id: str, log: StepLog) -> NodeInfo:
-        return await self.replace_node(cluster_id, "monitor", log)
+    async def recreate_monitor(self, cluster_id: str, log: StepLog) -> ClusterInfra:
+        await self.replace_node(cluster_id, "monitor", log)
+        return self._infra(cluster_id)
 
     async def describe(self, cluster_id: str) -> list[NodeInfo]:
         c = self.w.clusters.get(cluster_id)

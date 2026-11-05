@@ -100,8 +100,9 @@ class Infrastructure(Protocol):
         (Scylla ``replace_node_first_boot``). Returns the new node."""
         ...
 
-    async def recreate_monitor(self, cluster_id: str, log: StepLog) -> NodeInfo:
-        """Recreate the Monitor Node from scratch."""
+    async def recreate_monitor(self, cluster_id: str, log: StepLog) -> ClusterInfra:
+        """Recreate the Monitor Node from scratch. Returns the whole Cluster view because
+        Grafana/Manager endpoints change with the Monitor Node and only the driver knows them."""
         ...
 
     async def describe(self, cluster_id: str) -> list[NodeInfo]:

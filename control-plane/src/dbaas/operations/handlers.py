@@ -126,11 +126,9 @@ async def recreate_monitor(ctx: OperationContext) -> None:
     c = await _cluster(ctx)
     c.status = ClusterStatus.RECOVERING
     await ctx.session.commit()
-    info = await ctx.provider.infra.recreate_monitor(c.id, ctx.step_log)
-    _apply_node(c, info)
-    c.grafana_url = f"http://{info.public_ip}:3000"
-    c.manager_url = f"http://{info.public_ip}:5080"
-    infra = infra_of(c)
+    infra = await ctx.provider.infra.recreate_monitor(c.id, ctx.step_log)
+    _apply_node(c, infra.monitor)
+    c.grafana_url, c.manager_url = infra.grafana_url, infra.manager_url
     c.manager_cluster_id = await ctx.provider.ops.register_in_manager(infra, c.name, ctx.step_log)
     await ctx.provider.ops.set_backup_schedule(
         infra, c.manager_cluster_id, c.backup_interval_hours, c.backup_retention

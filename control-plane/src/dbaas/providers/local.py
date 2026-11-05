@@ -531,7 +531,7 @@ class LocalInfrastructure:
                 return ids[address]
         raise LookupError(f"no live peer knows the host ID of {address}")
 
-    async def recreate_monitor(self, cluster_id: str, log: StepLog) -> NodeInfo:
+    async def recreate_monitor(self, cluster_id: str, log: StepLog) -> ClusterInfra:
         net = await self._network(cluster_id)
         if net is None:
             raise LookupError(f"Cluster {cluster_id} has no network")
@@ -540,7 +540,7 @@ class LocalInfrastructure:
         await self.docker("rm", "-f", "-v", *names, check=False)
         await self._start_monitor(cluster_id, net)
         await log("Monitor Node recreated")
-        return (await self._infra(cluster_id, net)).monitor
+        return await self._infra(cluster_id, net)
 
     async def describe(self, cluster_id: str) -> list[NodeInfo]:
         net = await self._network(cluster_id)
