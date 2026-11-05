@@ -29,3 +29,4 @@ dist/
 
 # Agent worktrees
 .claude/worktrees/
+control-plane/.terraform-work/
