@@ -84,6 +84,14 @@ class FakeWorld:
                 return httpx.Response(200, json=c) if c else httpx.Response(404, json={})
             self.clusters[parts[1]] = body
             return httpx.Response(200)
+        if parts[0] == "cluster" and parts[2] == "backups" and method == "GET":
+            return httpx.Response(
+                200,
+                json=[
+                    {"snapshot_info": [{"snapshot_tag": "sm_b"}, {"snapshot_tag": "sm_a"}]},
+                    {"snapshot_info": [{"snapshot_tag": "sm_a"}]},
+                ],
+            )
         if parts[0] == "cluster" and parts[2] == "tasks":
             if method == "GET":
                 return httpx.Response(200, json=list(self.tasks.values()))
@@ -435,3 +443,12 @@ async def test_local_replace_node_uses_host_id_of_dead_node(world: FakeWorld) ->
     assert "127.0.0.1:21032:10000" in cmd
     assert any(c[0] == "cp" and c[-1].endswith("scylla-manager-agent.yaml") for c in docker.calls)
     assert ("start", "dbaas-c-1-data-2") in docker.calls
+
+
+async def test_list_snapshots_dedupes_and_keeps_control_plane_location(world: FakeWorld) -> None:
+    infra = make_infra()
+    snaps = await make_ops(world).list_snapshots(infra, "mgr-1")
+    assert [x.snapshot_tag for x in snaps] == ["sm_a", "sm_b"]
+    assert all(x.location == infra.backup_location for x in snaps)
+    method, url, _ = world.requests[-1]
+    assert method == "GET" and url.endswith("/cluster/mgr-1/backups")

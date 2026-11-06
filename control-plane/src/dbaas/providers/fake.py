@@ -169,6 +169,24 @@ class FakeClusterOps:
         await self.w.step(log, f"snapshot {tag} uploaded")
         return SnapshotRef(snapshot_tag=tag, location=infra.backup_location)
 
+    async def list_snapshots(
+        self, infra: ClusterInfra, manager_cluster_id: str
+    ) -> list[SnapshotRef]:
+        prefix = f"{infra.backup_location}/"
+        return [
+            SnapshotRef(snapshot_tag=k.removeprefix(prefix), location=infra.backup_location)
+            for k in self.w.snapshots
+            if k.startswith(prefix)
+        ]
+
+    def scheduled_backup(self, cluster_id: str) -> str:
+        """Simulate Manager's own scheduled Backup task firing (test helper)."""
+        tag = f"sm_{secrets.token_hex(6)}"
+        loc = f"s3:fake-bucket/clusters/{cluster_id}"
+        c = self.w.clusters[cluster_id]
+        self.w.snapshots[f"{loc}/{tag}"] = {k: list(v) for k, v in c.tables.items()}
+        return tag
+
     async def restore(
         self, infra: ClusterInfra, manager_cluster_id: str, snapshot: SnapshotRef, log: StepLog
     ) -> None:

@@ -348,6 +348,20 @@ class ManagerClusterOps:
         await log(f"snapshot {tag} uploaded to {loc.manager_location}")
         return SnapshotRef(snapshot_tag=str(tag), location=infra.backup_location)
 
+    async def list_snapshots(
+        self, infra: ClusterInfra, manager_cluster_id: str
+    ) -> list[SnapshotRef]:
+        loc = parse_backup_location(infra.backup_location)
+        async with self._manager(infra) as mgr:
+            items = await mgr.list_backups(manager_cluster_id, [loc.manager_location])
+        tags = {
+            str(s["snapshot_tag"])
+            for item in items
+            for s in (item.get("snapshot_info") or [])
+            if s.get("snapshot_tag")
+        }
+        return [SnapshotRef(snapshot_tag=t, location=infra.backup_location) for t in sorted(tags)]
+
     async def restore(
         self, infra: ClusterInfra, manager_cluster_id: str, snapshot: SnapshotRef, log: StepLog
     ) -> None:

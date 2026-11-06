@@ -130,7 +130,9 @@ async def test_auto_recovery_preempts_backup(env: Env) -> None:
     assert ops["backup"]["status"] == "cancelled"
     assert ops["replace_node"]["status"] == "succeeded"
     backups = (await env.client.get(f"/api/v1/clusters/{cid}/backups")).json()
-    assert backups[0]["status"] == "failed"
+    # Pre-emption may land before the Backup row is written; either way none may be left
+    # dangling as "running" or claim to be "done".
+    assert all(b["status"] == "failed" for b in backups)
 
 
 async def test_auto_recovery_can_be_disabled(env: Env) -> None:
@@ -163,3 +165,25 @@ async def test_openapi_exposes_all_resources(env: Env) -> None:
         "/api/v1/audit-events",
     ]:
         assert p in paths
+
+
+async def test_scheduled_backups_are_discovered_and_purges_mirrored(env: Env) -> None:
+    from dbaas.providers.fake import FakeClusterOps
+
+    cid = await env.create_cluster()
+    ops = env.runner.provider.ops
+    assert isinstance(ops, FakeClusterOps)
+    tag = ops.scheduled_backup(cid)
+    await env.health.sync_backups_once()
+    backups = (await env.client.get(f"/api/v1/clusters/{cid}/backups")).json()
+    assert [(b["snapshot_tag"], b["scheduled"], b["status"]) for b in backups] == [
+        (tag, True, "done")
+    ]
+
+    await env.health.sync_backups_once()  # idempotent
+    assert len((await env.client.get(f"/api/v1/clusters/{cid}/backups")).json()) == 1
+
+    env.world.snapshots.clear()  # Manager retention purged it
+    await env.health.sync_backups_once()
+    backups = (await env.client.get(f"/api/v1/clusters/{cid}/backups")).json()
+    assert backups[0]["status"] == "deleted"

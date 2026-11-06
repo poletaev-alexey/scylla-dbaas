@@ -21,12 +21,13 @@ from dbaas import audit
 from dbaas.domain import (
     SYSTEM_ACTOR,
     AuditResult,
+    BackupStatus,
     ClusterStatus,
     NodeRole,
     NodeStatus,
     OperationType,
 )
-from dbaas.models import Cluster, Node, utcnow
+from dbaas.models import Backup, Cluster, Node, utcnow
 from dbaas.operations.handlers import infra_of
 from dbaas.operations.runner import OperationConflict, OperationRunner
 from dbaas.providers.base import InstanceState
@@ -34,6 +35,7 @@ from dbaas.providers.base import InstanceState
 log = structlog.get_logger("health")
 
 WATCHED = (ClusterStatus.HEALTHY, ClusterStatus.DEGRADED)
+BACKUP_SYNC_EVERY_TICKS = 20  # ~5 min at the default 15 s interval
 
 
 class HealthChecker:
@@ -59,12 +61,65 @@ class HealthChecker:
             await asyncio.gather(self._task, return_exceptions=True)
 
     async def _loop(self) -> None:
+        tick = 0
         while True:
             try:
                 await self.check_once()
+                if tick % BACKUP_SYNC_EVERY_TICKS == 0:
+                    await self.sync_backups_once()
             except Exception:
                 log.exception("health.check_failed")
+            tick += 1
             await asyncio.sleep(self.interval)
+
+    async def sync_backups_once(self) -> None:
+        """Mirror Manager's view of Backups into the Control Plane.
+
+        Scheduled Backups are taken by Scylla Manager itself, so the Control Plane only
+        learns about them here; snapshots purged by Manager's retention become Deleted.
+        """
+        async with self.sessions() as s:
+            clusters = (await s.scalars(select(Cluster).where(Cluster.status.in_(WATCHED)))).all()
+            for c in clusters:
+                if not c.manager_cluster_id or not c.backup_location:
+                    continue
+                snaps = await self.runner.provider.ops.list_snapshots(
+                    infra_of(c), c.manager_cluster_id
+                )
+                manager_tags = {sn.snapshot_tag for sn in snaps}
+                rows = (await s.scalars(select(Backup).where(Backup.cluster_id == c.id))).all()
+                known = {b.snapshot_tag for b in rows if b.snapshot_tag}
+                for sn in snaps:
+                    if sn.snapshot_tag in known:
+                        continue
+                    s.add(
+                        Backup(
+                            cluster_id=c.id,
+                            cluster_name=c.name,
+                            location=sn.location,
+                            snapshot_tag=sn.snapshot_tag,
+                            status=BackupStatus.DONE,
+                            scheduled=True,
+                            finished_at=utcnow(),
+                        )
+                    )
+                    audit.record(
+                        s,
+                        actor=SYSTEM_ACTOR,
+                        action="backup.discovered",
+                        target_type="cluster",
+                        target_id=c.id,
+                        result=AuditResult.SUCCEEDED,
+                        snapshot_tag=sn.snapshot_tag,
+                    )
+                for b in rows:
+                    if (
+                        b.status is BackupStatus.DONE
+                        and b.snapshot_tag
+                        and b.snapshot_tag not in manager_tags
+                    ):
+                        b.status = BackupStatus.DELETED
+            await s.commit()
 
     async def check_once(self, now: datetime | None = None) -> None:
         now = now or utcnow()

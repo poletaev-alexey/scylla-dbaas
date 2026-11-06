@@ -129,6 +129,12 @@ class ClusterOps(Protocol):
         """Run a Backup now and wait for completion."""
         ...
 
+    async def list_snapshots(
+        self, infra: ClusterInfra, manager_cluster_id: str
+    ) -> list[SnapshotRef]:
+        """All snapshots Manager holds for this Cluster, including scheduled ones."""
+        ...
+
     async def restore(
         self, infra: ClusterInfra, manager_cluster_id: str, snapshot: SnapshotRef, log: StepLog
     ) -> None:
