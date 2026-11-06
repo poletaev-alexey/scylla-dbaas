@@ -1,77 +1,179 @@
 # Scylla DBaaS
 
-A simplified Database-as-a-Service for ScyllaDB on AWS: create and operate a Cluster
-(3 Data Nodes + 1 Monitor Node running Scylla Manager and the Scylla Monitoring Stack)
-through a web UI and a REST API. Assignment brief: [`task.txt`](task.txt).
+A simplified Database-as-a-Service for ScyllaDB on AWS. A user creates and operates a
+**Cluster** (3 Data Nodes + 1 Monitor Node running Scylla Manager and the Scylla Monitoring
+Stack in Docker, all on Ubuntu 24.04) through a web UI and a REST API.
+Assignment brief: [`task.txt`](task.txt).
 
-> Skeleton — the final version of this README is being completed.
+```
+ Operator laptop                     Control Plane (docker-compose, local)          AWS eu-central-1, per Cluster
+┌──────────────┐  REST /api/v1   ┌────────────────────────────────────────┐   ┌──────────────────────────────────┐
+│ React UI     │ ──────────────▶ │ FastAPI ── API key → Actor ── Audit    │   │ Terraform state (S3)             │
+│ curl / SDK   │                 │ Operation runner (1 per Cluster, 409)  │──▶│ 3 × Data Node  i4i.large         │
+│ cql-client   │ ──CQL 9042───┐  │ Health checker → Auto-recovery         │   │   ScyllaDB + manager-agent       │
+└──────────────┘              │  │ Provider: fake | local | aws           │   │ Monitor Node t3.xlarge (Docker)  │
+                              │  │ SQLite: Clusters, Operations, Backups  │   │   Manager, Prometheus, Grafana,  │
+                              │  └────────────────────────────────────────┘   │   Loki                           │
+                              └─────────────────────────────────────────────▶ │ S3 Backups · Secrets Manager     │
+                                                                              └──────────────────────────────────┘
+```
 
-## Quickstart
+- Vocabulary: [`GLOSSARY.md`](GLOSSARY.md) — used verbatim in code, API and UI.
+- Decisions: [`docs/adr/`](docs/adr/) (6 ADRs).
+- How a human and AI agents built it: [`docs/ai-process/`](docs/ai-process/).
+- Plan deck: <https://claude.ai/artifact/J6JGMDfxrjWyiCiQBs1CLi>.
 
-Prerequisites: [uv](https://docs.astral.sh/uv/), Docker, Node 22 (UI), Terraform ≥ 1.6
-(AWS only).
+## Status — what is verified and what is not
+
+Be precise about this: everything below the line has been written and statically checked,
+but **has not yet run against real AWS or a real ScyllaDB process.**
+
+| Area | State | Evidence |
+|---|---|---|
+| Control Plane API, Operations, concurrency (409), Auto-recovery policy, Backup/Restore flow, audit, metrics | ✅ runs | 14 end-to-end lifecycle tests on the fake Provider (20/20 repeated runs); manual API smoke run: create → Backup → delete → Restore → audit |
+| Scylla Manager / Scylla REST clients, `ManagerClusterOps` | ✅ unit-tested | 24 tests against a mocked Manager + REST API; endpoints checked against Manager swagger |
+| `aws` driver (Terraform runner, describe, credentials) | ✅ unit-tested | fake `terraform` binary + moto |
+| Terraform `base` + `cluster`, cloud-init | ⚠️ static only | `terraform fmt`, `validate`; templates render and pass `bash -n` |
+| `local` Docker driver, integration test | ⚠️ written, not run | Docker daemon was not available; test is skipped without `DBAAS_INTEGRATION=1` |
+| UI (6 screens) | ✅ runs | lint, typecheck, build; clicked through in headless Chromium against the fake Provider |
+| CQL client (bonus) | ✅ unit-tested | 29 tests with a mocked session; never connected to real Scylla |
+| CI workflows | ⚠️ not run on GitHub | `actionlint` clean; no GitHub remote yet |
+| **10-step AWS demo (definition of done)** | ❌ not run | needs AWS credentials — see [Running on AWS](#running-on-aws) |
+
+## Quickstart (no cloud, no Docker)
+
+Prerequisites: [uv](https://docs.astral.sh/uv/), Node 22.
 
 ```bash
-make install        # Python venvs (uv) + UI dependencies
-make test           # unit tests: control-plane + cql-client
-make lint           # ruff + mypy --strict, terraform fmt, UI lint/typecheck, actionlint
-
-make api-fake       # API on :8000 with the in-memory fake Provider (no Docker, no AWS)
-make dev            # Control Plane + UI via docker compose
+make install
+make test                 # control-plane + cql-client unit tests
+make api-fake             # API on :8000, in-memory fake Provider (1 s per step)
+cd ui && cp .env.example .env && npm run dev     # UI on :5173, API key: dev-key
 ```
 
 API docs: <http://localhost:8000/docs> (header `X-API-Key: dev-key`).
 
-## Architecture
+The fake Provider simulates the whole lifecycle, so every UI screen and API call can be
+demonstrated without spending money.
 
-- Vocabulary: [`GLOSSARY.md`](GLOSSARY.md)
-- Decisions: [`docs/adr/`](docs/adr/)
-- How the work was split between humans and AI agents: [`docs/ai-process/`](docs/ai-process/)
+## Running locally on Docker (`local` driver)
+
+```bash
+make api-local            # terminal 1: Control Plane on the host with DBAAS_PROVIDER=local
+make demo-local           # terminal 2: create → write → verify → Backup → Restore → verify → delete
+```
+
+Three `scylladb/scylla` containers + a Monitor container set (Manager, Prometheus, Grafana)
+per Cluster, plus an S3-compatible object store for Backups. Ports are published on
+`127.0.0.1` because container IPs are not reachable from a macOS host.
+
+## Running on AWS
+
+One-time:
+
+```bash
+aws configure                                  # or SSO; needs EC2, S3, IAM, Secrets Manager, SSM
+cd infra/base && terraform init && terraform apply
+```
+
+Then set the Control Plane env (full list in [`infra/README.md`](infra/README.md)), start it
+with `DBAAS_PROVIDER=aws`, and use the UI or API. **Always delete Clusters at the end of a
+session** — a running Cluster costs roughly $0.8/hour. The `aws-e2e` GitHub workflow does
+the same end to end with GitHub OIDC and always destroys what it created.
+
+### Demo script (definition of done)
+
+1. Create a Cluster in the UI → watch the Operation log until **Healthy**.
+2. `cql-client --from-api … write 1000` (keyspace `demo`, RF=3, QUORUM).
+3. Open Grafana from the Cluster page → Scylla dashboards show the writes.
+4. Terminate one Data Node in the AWS console.
+5. The Cluster turns **Degraded**; after the 2-minute grace period Auto-recovery runs a Node
+   Replacement (same IP, `replace_node_first_boot`, then repair) → **Healthy**.
+6. **Backup now**.
+7. Delete the Cluster (type its name to confirm). The Backup stays.
+8. Backups → **Restore into new Cluster**.
+9. `cql-client … verify` → all 1000 rows are back.
+10. Audit log shows the whole story, with `system` as the Actor of automatic actions.
+
+## API
+
+Everything the UI does is a public API call. Mutating calls return `202` with an
+**Operation** to poll; a second mutating call on the same Cluster returns `409` with
+`active_operation_id`.
+
+| Method | Path | |
+|---|---|---|
+| POST / GET | `/api/v1/clusters` | create (optionally `from_backup_id` = Restore) / list |
+| GET / PATCH / DELETE | `/api/v1/clusters/{id}` | details / toggle `auto_recovery` / delete (`?confirm=<name>`) |
+| POST | `/api/v1/clusters/{id}/nodes/{node}/replace` | Node Replacement (or Monitor Node recreation) |
+| POST | `/api/v1/clusters/{id}/rolling-restart` | |
+| GET | `/api/v1/clusters/{id}/connection` | contact points, user, password (only on the first call) |
+| GET / PUT | `/api/v1/clusters/{id}/backup-schedule` | |
+| POST / GET / DELETE | `/api/v1/clusters/{id}/backups` | Backup now / list / delete all of a Cluster's Backups |
+| GET | `/api/v1/backups`, `/api/v1/backups/{id}` | includes Backups of deleted Clusters |
+| GET | `/api/v1/operations`, `/api/v1/operations/{id}` | with step log |
+| GET | `/api/v1/audit-events?cluster_id=&actor=&action=` | |
+| GET | `/metrics`, `/api/v1/healthz` | Prometheus metrics of the Control Plane |
+
+## How the requirements are covered
+
+| Requirement | How |
+|---|---|
+| Provisioning & lifecycle | Terraform per Cluster driven by Operations; create, delete, rolling restart, Node Replacement |
+| Failure recovery | systemd restarts Scylla; the health checker detects dead Data/Monitor Nodes (cloud state + Scylla's own view), Auto-recovery replaces them after a grace period; Auto-recovery pre-empts a running Backup |
+| Backup & restore | Scylla Manager → S3, daily schedule (retention 7) + Backup now; scheduled Backups are mirrored into the Control Plane every ~5 min; Restore = new Cluster from a Backup (ADR-0005) |
+| Monitoring & observability | Scylla Monitoring Stack (Prometheus, Grafana, Loki with node logs) on the Monitor Node; `/metrics` and JSON logs for the Control Plane |
+| Logging & auditing | Append-only Audit Events (actor, action, target, result, request id) incl. denied requests and automatic actions; structured JSON logs with request ids |
+| API | FastAPI + OpenAPI; UI types are generated from it |
+| CI | `ci.yml`: ruff, mypy --strict, pytest, terraform fmt/validate/tflint/checkov, UI lint/typecheck/build, Docker builds, optional local-driver integration; `aws-e2e.yml` manual |
+| Bonus CQL client | `cql-client` write / read / verify, token-aware, QUORUM |
+
+## Assumptions
+
+- One operator, trusted network position; the Control Plane runs on their machine (ADR-0001).
+- One Cluster at a time in practice: each Cluster uses 4 Elastic IPs and the default quota
+  is 5 per region.
+- Cluster size is fixed at 3 Data Nodes (as in the brief); no scaling or version upgrades.
+- RF=3 and QUORUM for user data, so one Data Node may be lost without unavailability.
+- "Monitor Node lost" counts as **Degraded**: data is fine, Backups and metrics are not.
+
+## Known limitations
+
+- Nothing has run on real AWS yet (see Status).
+- Clusters are reachable from the operator CIDR over the internet (ADR-0004), including the
+  unauthenticated Scylla REST API on port 10000. No TLS for CQL or between nodes.
+- One static API key per Actor; no roles.
+- Operations run inside the API process: a restart marks running Operations failed instead
+  of resuming them (ADR-0003). SQLite is the Control Plane database.
+- Data Nodes install the AWS CLI via snap at boot to read their secret: slower boot.
+- Backups older than a Cluster's lifetime are deleted only explicitly; Manager's own
+  retention governs scheduled snapshots.
+- Local driver on macOS: cql-client can use only one contact point (container IPs are not
+  routable from the host).
+
+## What production would do differently
+
+| Here | Production |
+|---|---|
+| Control Plane on a laptop, SQLite | HA service in its own account/VPC, Postgres (RDS), migrations |
+| In-process asyncio Operation runner | Durable workflows (Temporal / Step Functions) with retries and resumption |
+| Public subnet + IP allowlist | Private subnets, PrivateLink / VPC peering to customer networks, no public IPs |
+| No TLS | Client-to-node and node-to-node TLS, certificate rotation |
+| API key → Actor | OIDC, RBAC, per-tenant isolation and quotas |
+| cloud-init installs packages at boot | Packer-baked AMIs, immutable nodes, faster Node Replacement |
+| One Monitor Node per Cluster | Shared, multi-tenant observability backend; alerts routed to on-call |
+| Fixed 3 nodes | Scale out/in, rolling upgrades, multi-AZ placement guarantees, multi-DC |
+| Audit table in SQLite | Tamper-evident audit log shipped off-host, plus CloudTrail |
+
+## Repository layout
 
 | Path | What |
 |---|---|
-| `control-plane/` | FastAPI API, Operation worker, Provider drivers (`fake`, `local`, `aws`) |
-| `infra/` | Terraform: `base` stack, per-Cluster `cluster` module, cloud-init |
+| `control-plane/` | FastAPI API, Operation runner, health checker, Provider drivers (`fake`, `local`, `aws`), Scylla/Manager clients |
+| `infra/` | Terraform `base` stack, per-Cluster `cluster` module, cloud-init |
 | `ui/` | React + Vite SPA on the public `/api/v1` |
 | `cql-client/` | `cql-client` CLI (bonus) and the `dbaas-e2e` scenario runner |
+| `deploy/local/` | Assets for the local Docker driver |
 | `.github/workflows/` | `ci.yml` (every PR), `aws-e2e.yml` (manual, GitHub OIDC) |
-
-## CQL client
-
-```bash
-cd cql-client && uv venv && uv pip install -e .
-# connection details straight from the Control Plane (password is revealed only once):
-.venv/bin/cql-client --from-api http://localhost:8000 --cluster <id> --api-key dev-key write 1000
-.venv/bin/cql-client --hosts <ip1>,<ip2>,<ip3> --username scylla --password '<pw>' read
-.venv/bin/cql-client --hosts ... --username scylla --password '<pw>' verify   # after a Restore
-```
-
-Keyspace `demo` (NetworkTopologyStrategy, RF=3, datacenter auto-detected), table
-`kv(id uuid, ts timestamp, payload text)`, prepared statements, token-aware routing,
-consistency QUORUM. `write` records every row in `cql-manifest.json`; `verify` re-reads
-them and exits non-zero on any missing or different row.
-
-## Demo script
-
-Local (Docker, `local` Provider driver):
-
-```bash
-make api-local      # terminal 1: Control Plane with DBAAS_PROVIDER=local
-make demo-local     # terminal 2: create -> write -> verify -> Backup -> Restore -> verify -> delete
-```
-
-On AWS: run the **aws-e2e** workflow (Actions → aws-e2e → Run workflow); one-time IAM/OIDC
-setup is documented at the top of [`.github/workflows/aws-e2e.yml`](.github/workflows/aws-e2e.yml).
-
-Click-through demo of the UI: _TODO_.
-
-## CI
-
-`ci.yml` runs on every PR and push to `main`: control-plane and cql-client (ruff, mypy
---strict, pytest), terraform (fmt, validate, tflint, checkov report-only), ui (lint,
-typecheck, build), docker image builds (no push), and — when the repository variable
-`DBAAS_INTEGRATION=1` is set — the full lifecycle on the `local` driver.
-
-## Assumptions, limitations, production differences
-
-_TODO_
+| `docs/adr/`, `GLOSSARY.md` | Decisions and vocabulary |
+| `docs/ai-process/` | Grilling transcript, agent instructions, log, AI mistakes |
