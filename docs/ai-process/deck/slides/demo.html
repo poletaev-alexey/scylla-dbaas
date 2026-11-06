@@ -1,0 +1,21 @@
+<section id="demo" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Definition of done</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">A 10-step demo on real AWS</h2>
+</div>
+<div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:20px">
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">01</p><p style="font-size:26px;line-height:1.35">Create a Cluster in the UI</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">02</p><p style="font-size:26px;line-height:1.35">cql-client writes 1000 rows</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">03</p><p style="font-size:26px;line-height:1.35">Grafana shows the load</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">04</p><p style="font-size:26px;line-height:1.35">Terminate a Data Node</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#0F1B2D;padding:28px;border:1px solid #0F1B2D;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">05</p><p style="font-size:26px;line-height:1.35;color:#F5F4EF">Auto-recovery → Healthy</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">06</p><p style="font-size:26px;line-height:1.35">Backup now</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">07</p><p style="font-size:26px;line-height:1.35">Delete the Cluster</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">08</p><p style="font-size:26px;line-height:1.35">Restore into a new one</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#0F1B2D;padding:28px;border:1px solid #0F1B2D;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">09</p><p style="font-size:26px;line-height:1.35;color:#F5F4EF">verify: all rows back</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">10</p><p style="font-size:26px;line-height:1.35">Audit log tells the story</p></div>
+</div>
+<p style="font-size:26px;color:#3B4757;line-height:1.4">Recorded on video as a fallback for the live interview. Every step is also an API call, scripted in <b>dbaas-e2e</b>.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 10</p>
+<aside>Status at the time of writing: the same scenario passes at API level on the fake Provider; the real AWS run is still pending AWS credentials.</aside>
+</section>

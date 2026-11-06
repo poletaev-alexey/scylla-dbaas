@@ -1,0 +1,27 @@
+<section id="arch" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Architecture</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">A local Control Plane drives Clusters in AWS</h2>
+</div>
+<div style="display:flex;align-items:stretch;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFFFF;padding:36px;border:2px solid #D9DEE5;border-radius:12px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Operator laptop</p>
+<h3 style="font-size:36px;font-weight:600;line-height:1.2">Clients</h3>
+<ul style="font-size:26px;line-height:1.5;color:#3B4757"><li>Web UI (React + TS)</li><li>Any REST client</li><li>cql-client CLI</li></ul>
+</div>
+<x-connector style="width:64px;height:2px;align-self:center;color:#2563C9;border-width:3px" head="end"></x-connector>
+<div style="flex:1.2;display:flex;flex-direction:column;gap:16px;background:#0F1B2D;padding:36px;border:2px solid #0F1B2D;border-radius:12px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">docker-compose · local</p>
+<h3 style="font-size:36px;font-weight:600;line-height:1.2;color:#F5F4EF">Control Plane</h3>
+<ul style="font-size:26px;line-height:1.5;color:#AFC0D3"><li>FastAPI /api/v1 + API key</li><li>Operation worker (asyncio)</li><li>Health checker → Auto-recovery</li><li>Provider: aws | local</li><li>DB: Clusters, Operations, Audit Events</li></ul>
+</div>
+<x-connector style="width:64px;height:2px;align-self:center;color:#2563C9;border-width:3px" head="end"></x-connector>
+<div style="flex:1.2;display:flex;flex-direction:column;gap:16px;background:#FFFFFF;padding:36px;border:2px solid #2563C9;border-radius:12px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">AWS · eu-central-1</p>
+<h3 style="font-size:36px;font-weight:600;line-height:1.2">Per Cluster</h3>
+<ul style="font-size:26px;line-height:1.5;color:#3B4757"><li>Terraform state in S3</li><li>3 × Data Node, cloud-init</li><li>Monitor Node: Manager, Prometheus, Grafana, Loki</li><li>S3 Backups, Secrets Manager</li></ul>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · Plan v1 · 04</p>
+<aside>The Control Plane never SSHes into nodes: Terraform creates VMs, cloud-init configures them, and day-2 operations go through the Scylla Manager API and Scylla REST API. The Provider interface lets the same Control Plane run against Docker containers locally and in CI.</aside>
+</section>

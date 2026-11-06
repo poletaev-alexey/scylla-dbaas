@@ -10,3 +10,4 @@
 - **2026-11-05** – infra-aws merged after a mid-flight contract update. Repo-wide verification on main: control-plane 52 passed/1 skipped, cql-client 29 passed, ruff + mypy --strict clean, terraform fmt + validate OK on both stacks, UI typecheck/lint/build OK. Nothing has run on real AWS or Docker yet.
 - Accepted with documentation (not fixed): Scylla REST :10000 reachable from operator CIDR without auth (ADR-0004 scope); 4 Elastic IPs per Cluster (quota 5/region); AWS CLI via snap on nodes adds boot time.
 - **2026-11-06** – Scheduled-Backup sync added (gap found during planning). API smoke run on the fake Provider passed end to end. README finalised with an explicit verified / not-verified table. control-plane: 54 passed, 1 skipped.
+- **2026-11-06** – Deck finished: 15 slides (plan + retrospective). Sources in docs/ai-process/deck.

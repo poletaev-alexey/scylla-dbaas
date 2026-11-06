@@ -9,5 +9,6 @@ This folder is a graded deliverable. It records how the work was split between a
 | `agents/` | The exact instructions given to each parallel sub-agent |
 | `log.md` | Chronological log of prompts, outcomes and corrections |
 | `mistakes.md` | Where the AI was wrong, how it was caught, what changed |
+| `deck/` | Source of the AI-generated plan + retrospective deck (15 slides), rendered at <https://claude.ai/artifact/J6JGMDfxrjWyiCiQBs1CLi> |
 
 Workflow: **grill → glossary + ADRs → plan deck → contracts → parallel agents → review → demo → retrospective deck.**

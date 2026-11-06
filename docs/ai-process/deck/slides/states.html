@@ -1,0 +1,24 @@
+<section id="states" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Cluster status</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Degraded still serves data; Recovering fixes it</h2>
+</div>
+<div style="display:flex;align-items:center;gap:16px">
+<p style="font-size:30px;font-weight:600;background:#E9EEF3;padding:20px 32px;border-radius:999px">Provisioning</p>
+<x-connector style="width:56px;height:2px;color:#5B6675;border-width:3px" head="end"></x-connector>
+<p style="font-size:30px;font-weight:600;background:#2563C9;color:#F5F4EF;padding:20px 32px;border-radius:999px">Healthy</p>
+<x-connector style="width:56px;height:2px;color:#5B6675;border-width:3px" head="both"></x-connector>
+<p style="font-size:30px;font-weight:600;background:#F6D9C4;color:#0F1B2D;padding:20px 32px;border-radius:999px">Degraded</p>
+<x-connector style="width:56px;height:2px;color:#5B6675;border-width:3px" head="end"></x-connector>
+<p style="font-size:30px;font-weight:600;background:#0F1B2D;color:#F5F4EF;padding:20px 32px;border-radius:999px">Recovering → Healthy</p>
+</div>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
+<tr><th style="width:22%">Status</th><th style="width:78%">Meaning</th></tr>
+<tr><td>Healthy</td><td>All 3 Data Nodes up and serving; Monitor Node reachable</td></tr>
+<tr><td>Degraded</td><td>Serves QUORUM, but a Data Node is down or the Monitor Node is lost</td></tr>
+<tr><td>Recovering</td><td>Node Replacement or Monitor Node recreation in progress</td></tr>
+<tr><td>Failed</td><td>Creation did not complete; the only action is delete</td></tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · Plan v1 · 07</p>
+<aside>Edge case settled in grilling: losing only the Monitor Node makes the Cluster Degraded, not Healthy, because Backups and metrics stop even though data is fully available. Deleting and Deleted are terminal lifecycle states not shown on the diagram.</aside>
+</section>

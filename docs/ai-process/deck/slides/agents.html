@@ -1,0 +1,19 @@
+<section id="agents" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Human + machines</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Contracts first, then four agents in parallel</h2>
+</div>
+<div style="display:flex;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#2563C9;padding:28px;border-radius:12px"><h3 style="font-size:32px;font-weight:600;color:#F5F4EF">Human</h3><p style="font-size:24px;color:#F5F4EF;line-height:1.4">35 decisions in grilling, scope calls, review of the demo</p></div>
+<div style="flex:2;display:flex;flex-direction:column;gap:8px;background:#0F1B2D;padding:28px;border-radius:12px"><h3 style="font-size:32px;font-weight:600;color:#F5F4EF">Claude · orchestrator</h3><p style="font-size:24px;color:#AFC0D3;line-height:1.4">Wrote the Provider contract and Control Plane core, briefed agents, merged and verified every branch</p></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:20px">
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">infra-aws</p><p style="font-size:24px;color:#3B4757;line-height:1.4">Terraform, cloud-init, aws driver</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">scylla-ops</p><p style="font-size:24px;color:#3B4757;line-height:1.4">Manager + REST clients, local driver</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">ui</p><p style="font-size:24px;color:#3B4757;line-height:1.4">6 screens, clicked through in a browser</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">ci-cql</p><p style="font-size:24px;color:#3B4757;line-height:1.4">GitHub Actions, CQL client, e2e runner</p></div>
+</div>
+<p style="font-size:26px;color:#3B4757;line-height:1.4">Each agent: own git worktree, owned paths, “don’t change the contract — report it”, verify facts in official docs. Result: zero merge conflicts.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 11</p>
+<aside>The exact agent briefs are in docs/ai-process/agents. The rule “implement around a contract problem and report it” paid off twice: the UI agent found two API bugs and the ops agent found a contract flaw, instead of each silently patching shared code.</aside>
+</section>

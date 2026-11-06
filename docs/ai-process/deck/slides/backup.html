@@ -1,0 +1,18 @@
+<section id="backup" data-transition="fade" style="background:#E9EEF3;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Backup and Restore</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Restore never touches a live Cluster</h2>
+</div>
+<div style="display:flex;align-items:stretch;gap:16px">
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:2px solid #2563C9;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">1</p><h3 style="font-size:32px;font-weight:600">Backup</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Manager: daily, keep 7, or Backup now</p></div>
+<x-connector style="width:48px;height:2px;align-self:center;color:#2563C9;border-width:3px" head="end"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:2px solid #2563C9;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">2</p><h3 style="font-size:32px;font-weight:600">S3</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Encrypted, outlives the Cluster</p></div>
+<x-connector style="width:48px;height:2px;align-self:center;color:#2563C9;border-width:3px" head="end"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#0F1B2D;padding:32px;border:2px solid #0F1B2D;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">3</p><h3 style="font-size:32px;font-weight:600;color:#F5F4EF">Restore</h3><p style="font-size:24px;color:#AFC0D3;line-height:1.4">New Cluster: schema, then data</p></div>
+<x-connector style="width:48px;height:2px;align-self:center;color:#2563C9;border-width:3px" head="end"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:2px solid #2563C9;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">4</p><h3 style="font-size:32px;font-weight:600">Verify</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">cql-client verify re-reads every row</p></div>
+</div>
+<p style="font-size:26px;color:#3B4757;line-height:1.4">Scheduled Backups are taken by Manager itself; the Control Plane mirrors them every ~5 minutes and marks retention-purged ones Deleted.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 09</p>
+<aside>Why a new Cluster: Scylla Manager restores schema only into an empty cluster, and restoring next to the original avoids any risk to live data (ADR-0005). The mirroring of scheduled Backups was a gap spotted during integration and added afterwards.</aside>
+</section>

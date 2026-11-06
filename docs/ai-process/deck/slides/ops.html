@@ -1,0 +1,19 @@
+<section id="ops" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Failures and Operations</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Three tiers of failure, one Operation at a time</h2>
+</div>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
+<tr><th style="width:26%">What failed</th><th style="width:44%">What happens</th><th style="width:30%">Cluster status</th></tr>
+<tr><td>Scylla process</td><td>systemd restarts it</td><td>Healthy</td></tr>
+<tr><td>Data Node VM</td><td>2-min grace, then Node Replacement + repair</td><td>Degraded → Recovering</td></tr>
+<tr><td>Monitor Node VM</td><td>Recreate, re-register in Manager</td><td>Degraded → Recovering</td></tr>
+</table>
+<div style="display:flex;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><h3 style="font-size:32px;font-weight:600">409 on conflict</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">One active Operation per Cluster; the reply names the blocker</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><h3 style="font-size:32px;font-weight:600">Recovery first</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Auto-recovery cancels a running Backup</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><h3 style="font-size:32px;font-weight:600">Everything audited</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Requests, denials and automatic actions by “system”</p></div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 08</p>
+<aside>Health is judged from two views: the cloud (is the instance running?) and Scylla itself (do peers see the node as Up/Normal?). A Node Replacement keeps the node’s network interface and Elastic IP, so seeds, Prometheus targets and Manager’s host list stay valid.</aside>
+</section>
