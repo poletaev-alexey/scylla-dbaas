@@ -1,18 +1,18 @@
 <section id="status" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
 <div style="display:flex;flex-direction:column;gap:16px">
 <p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Retrospective · quality</p>
-<h2 style="font-size:64px;font-weight:600;line-height:1.1">Everything is built; not everything has run</h2>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Ran end to end on real AWS</h2>
 </div>
 <table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
-<tr><th style="width:40%">Part</th><th style="width:22%">State</th><th style="width:38%">Evidence</th></tr>
-<tr><td>Control Plane, Operations, Auto-recovery</td><td>Runs</td><td>54 tests, API smoke run</td></tr>
-<tr><td>UI, 6 screens</td><td>Runs</td><td>Browser click-through</td></tr>
-<tr><td>Manager / REST clients, aws driver</td><td>Unit-tested</td><td>Mocked APIs, moto</td></tr>
-<tr><td>CQL client</td><td>Unit-tested</td><td>29 tests, mocked session</td></tr>
-<tr><td>Terraform, cloud-init</td><td>Static only</td><td>validate, fmt, bash -n</td></tr>
-<tr><td>Local driver, CI on GitHub</td><td>Not run</td><td>No Docker daemon, no remote</td></tr>
-<tr><td>10-step demo on AWS</td><td>Not run</td><td>Needs AWS credentials</td></tr>
+<tr><th style="width:34%">Step</th><th style="width:66%">Result on AWS, 8 Nov 2026</th></tr>
+<tr><td>Create Cluster</td><td>Healthy with no manual step; Restore Cluster in 5 min</td></tr>
+<tr><td>CQL from laptop</td><td>1000 rows, RF=3 QUORUM, 0 mismatched</td></tr>
+<tr><td>Monitoring</td><td>8 Grafana dashboards, 12/12 Prometheus targets up</td></tr>
+<tr><td>Kill a Data Node</td><td>Degraded in 6 s → replaced by system → Healthy in 7 min, same IP</td></tr>
+<tr><td>Backup → Restore</td><td>Source deleted, Backup kept, 1000/1000 rows restored</td></tr>
+<tr><td>Cleanup</td><td>0 instances, EIPs, ENIs, secrets left</td></tr>
+<tr><td>Not yet run</td><td>CI on GitHub, rolling restart on AWS</td></tr>
 </table>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 12</p>
-<aside>The honest headline: the risky part of a DBaaS is the interaction with real ScyllaDB, Manager and EC2, and that is exactly what has not executed yet. Static checks and mocks are evidence of shape, not of behaviour.</aside>
+<aside>Before this run the honest headline was "everything is built, not everything has run". Five Cluster creations on AWS and three Docker runs later, the full 10-step demo passes through the public API only. Docker local driver also passes its integration test in about 90 seconds.</aside>
 </section>

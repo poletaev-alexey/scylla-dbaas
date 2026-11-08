@@ -1,11 +1,11 @@
 <section id="next" data-transition="fade" style="background:#0F1B2D;color:#F5F4EF;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:center;gap:56px">
 <p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF;letter-spacing:2px;text-transform:uppercase">What is left</p>
-<h2 style="font-size:88px;font-weight:600;line-height:1.05;color:#F5F4EF">Run it for real</h2>
+<h2 style="font-size:88px;font-weight:600;line-height:1.05;color:#F5F4EF">Close the last gaps</h2>
 <div style="display:flex;gap:24px">
-<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">Docker</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Local driver integration test, full lifecycle, no cost</p></div>
-<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">AWS</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">The 10-step demo, recorded, then destroy</p></div>
-<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">GitHub</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Push, get CI green, run aws-e2e once</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">GitHub CI</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Push, get CI green, run aws-e2e once</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">Rolling restart</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Unit-tested; run it once on AWS</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">Baked AMI</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Cut Node Replacement below 7 min</p></div>
 </div>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#AFC0D3">Scylla DBaaS · 15</p>
-<aside>Each of the three needs one action from the human: start Docker Desktop, configure AWS credentials, log in to GitHub. Everything else is in the repository.</aside>
+<aside>The core demo is done on real AWS. What remains is CI on GitHub (needs a remote), one AWS run of rolling restart, and the first production improvement: a baked AMI so replacement does not reinstall packages at boot.</aside>
 </section>

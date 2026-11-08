@@ -1,17 +1,17 @@
 <section id="mistakes" data-transition="fade" style="background:#E9EEF3;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
 <div style="display:flex;flex-direction:column;gap:16px">
 <p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Retrospective · where the AI was wrong</p>
-<h2 style="font-size:64px;font-weight:600;line-height:1.1">Six real defects, all caught before merge</h2>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">18 defects: mocks caught 7, reality caught 11</h2>
 </div>
 <table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
-<tr><th style="width:50%">Defect</th><th style="width:50%">Caught by</th></tr>
-<tr><td>Enum columns read back as plain strings</td><td>First test run, 7 of 13 red</td></tr>
-<tr><td>Lazy load after rollback crashed error path</td><td>Targeted failure test</td></tr>
-<tr><td>Backup stuck “running” after pre-emption</td><td>Running tests 10× (8/10 green)</td></tr>
-<tr><td>Naive timestamps, missing 409 field</td><td>UI agent, as API consumer</td></tr>
-<tr><td>Monitor URLs guessed in the contract</td><td>Ops agent, reported not patched</td></tr>
-<tr><td>“Terraform installed” — it was not</td><td>Verification at merge time</td></tr>
+<tr><th style="width:52%">Defect</th><th style="width:48%">Caught by</th></tr>
+<tr><td>Backup race after pre-emption</td><td>Running tests 10×, not once</td></tr>
+<tr><td>Contract bugs (timestamps, 409, URLs)</td><td>UI and ops agents, as consumers</td></tr>
+<tr><td>Manager one-shot task never starts</td><td>First Docker run with real Manager</td></tr>
+<tr><td>Seed deadlock under Raft topology</td><td>AWS run, journal over SSM</td></tr>
+<tr><td>SG blocked hairpin to public IPs</td><td>AWS run, hypothesis tested by hand</td></tr>
+<tr><td>Package pin, file perms, EIP race</td><td>AWS bootstrap logs</td></tr>
 </table>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 13</p>
-<aside>Lessons: one green run proves little for async code; consumers find contract bugs that authors miss; never trust an exit code from a pipeline without pipefail. Full log in docs/ai-process/mistakes.md.</aside>
+<aside>Lessons: a mock encodes the author's belief about an API, so it cannot catch a wrong belief; only the real system can. One green run proves little for async code. Consumers find contract bugs that authors miss. Full log with cause and fix for all 18 in docs/ai-process/mistakes.md.</aside>
 </section>
