@@ -25,20 +25,29 @@ Assignment brief: [`task.txt`](task.txt).
 
 ## Status — what is verified and what is not
 
-Be precise about this: everything below the line has been written and statically checked,
-but **has not yet run against real AWS or a real ScyllaDB process.**
+Verified on **8 November 2026** against real AWS (`eu-central-1`) and real ScyllaDB 2026.3.4 /
+Scylla Manager 3.13.0 / Scylla Monitoring 4.16.3, driven only through the public API:
 
 | Area | State | Evidence |
 |---|---|---|
-| Control Plane API, Operations, concurrency (409), Auto-recovery policy, Backup/Restore flow, audit, metrics | ✅ runs | 14 end-to-end lifecycle tests on the fake Provider (20/20 repeated runs); manual API smoke run: create → Backup → delete → Restore → audit |
-| Scylla Manager / Scylla REST clients, `ManagerClusterOps` | ✅ unit-tested | 24 tests against a mocked Manager + REST API; endpoints checked against Manager swagger |
-| `aws` driver (Terraform runner, describe, credentials) | ✅ unit-tested | fake `terraform` binary + moto |
-| Terraform `base` + `cluster`, cloud-init | ⚠️ static only | `terraform fmt`, `validate`; templates render and pass `bash -n` |
-| `local` Docker driver, integration test | ⚠️ written, not run | Docker daemon was not available; test is skipped without `DBAAS_INTEGRATION=1` |
-| UI (6 screens) | ✅ runs | lint, typecheck, build; clicked through in headless Chromium against the fake Provider |
-| CQL client (bonus) | ✅ unit-tested | 29 tests with a mocked session; never connected to real Scylla |
+| Create Cluster on AWS (3 × `i4i.large` + `t3.xlarge`) | ✅ ran | Terraform + cloud-init → `healthy` with no manual step, ~16 min (Restore Cluster: 5 min) |
+| CQL client from the operator laptop (bonus) | ✅ ran | 1000 rows written and verified, RF=3 / QUORUM; 0 missing, 0 mismatched |
+| Monitoring | ✅ ran | Grafana 13 with 8 Scylla dashboards; Prometheus: 12/12 targets up (scylla, node_exporter, manager_agent ×3, Manager, Grafana, Prometheus) |
+| Auto-recovery | ✅ ran | EC2 instance of `data-2` terminated → `degraded` in 6 s → after the 120 s grace `replace_node` by actor `system` → new VM with the **same IP**, new Host ID (`replace_node_first_boot`), Manager repair → `healthy` 7 min after the failure; data readable throughout |
+| Backup → delete → Restore | ✅ ran | Manager backup to S3 (1480 objects); source Cluster deleted, Backup kept; Restore into a new Cluster (schema, then data) → all 1000 rows verified |
+| Audit | ✅ ran | every step above recorded with Actor (`oleksii` or `system`), action and result |
+| Cleanup | ✅ ran | Cluster delete + Backup delete leave 0 instances, EIPs, ENIs, secrets, backup objects |
+| `local` Docker driver | ✅ ran | integration test: create → write → Backup → delete → Restore → verify → delete, passes in ~90 s |
+| Control Plane, Operations, 409s, restart recovery | ✅ runs | 57 unit/lifecycle tests; ruff + mypy --strict clean |
+| UI (6 screens) | ✅ runs | lint, typecheck, build; clicked through against the fake Provider (not yet against AWS) |
 | CI workflows | ⚠️ not run on GitHub | `actionlint` clean; no GitHub remote yet |
-| **10-step AWS demo (definition of done)** | ❌ not run | needs AWS credentials — see [Running on AWS](#running-on-aws) |
+| Rolling restart on AWS | ⚠️ not run | unit-tested (drain → restart over SSM → wait UN, one node at a time) |
+
+Getting there took five Cluster creations on AWS and three integration runs on Docker; each
+found a bug that mocks and static checks had missed (ten in total, e.g. a seed-list deadlock
+under Raft topology, a Manager one-shot task that never starts, a security-group rule missing
+for hairpin traffic). All are listed with cause and fix in
+[`docs/ai-process/mistakes.md`](docs/ai-process/mistakes.md) (#8–#18).
 
 ## Quickstart (no cloud, no Docker)
 
@@ -139,7 +148,14 @@ Everything the UI does is a public API call. Mutating calls return `202` with an
 
 ## Known limitations
 
-- Nothing has run on real AWS yet (see Status).
+- Backups are stored where Scylla Manager puts them: `s3://<bucket>/backup/{meta,schema,sst}/cluster/<manager id>`.
+  The API's `location` (`s3:<bucket>/clusters/<id>`) is a logical name; the Manager id is derived
+  deterministically from the Cluster id, so the mapping is stable.
+- A new AWS account has a 5-vCPU limit for standard instances; one Cluster needs 10, so request
+  an increase (16 was approved in minutes). With 16 vCPU and 5 EIPs only one Cluster fits at a
+  time, which is why the demo deletes the source Cluster before restoring.
+- The CQL password is revealed once by the API; afterwards the operator reads it from Secrets
+  Manager (`dbaas/<id>/cql`).
 - Clusters are reachable from the operator CIDR over the internet (ADR-0004), including the
   unauthenticated Scylla REST API on port 10000. No TLS for CQL or between nodes.
 - One static API key per Actor; no roles.
