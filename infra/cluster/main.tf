@@ -225,6 +225,11 @@ resource "aws_instance" "data" {
 # --- Monitor Node ---------------------------------------------------------------------------
 
 resource "aws_instance" "monitor" {
+  # Associate the EIP while the ENI is still unattached. Without this the association
+  # raced the instance launch: "IncorrectInstanceState ... pending-instance-creation".
+  # (Data Nodes already wait for it: their user_data reads the EIP's public_ip.)
+  depends_on = [aws_eip.node]
+
   ami                  = data.aws_ami.ubuntu.id
   instance_type        = var.monitor_instance_type
   iam_instance_profile = data.aws_iam_instance_profile.node.name
