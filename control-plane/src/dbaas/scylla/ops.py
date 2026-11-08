@@ -44,6 +44,7 @@ from dbaas.scylla.rest import ScyllaRestClient
 MANAGER_ID_NAMESPACE = uuid.UUID("4f1c2a1e-6d0b-4d55-9a3e-1b7f3c9e2d10")
 BACKUP_SCHEDULE_TASK = "dbaas-backup-schedule"
 MANAGER_PORT = 5080
+REGISTER_ATTEMPTS = 24  # x poll_interval (5 s by default)
 
 NodeRestarter = Callable[[ClusterInfra, NodeInfo], Awaitable[None]]
 TokenResolver = Callable[[ClusterInfra], Awaitable[str]]
@@ -250,17 +251,34 @@ class ManagerClusterOps:
         if creds is not None:
             body |= {"username": creds.username, "password": creds.password}
 
-        async with self._manager(infra) as mgr:
-            if loc.cluster_id is None:
-                cid = await mgr.add_cluster(body)
-            else:
-                cid = manager_cluster_uuid(loc.cluster_id)
-                if await mgr.get_cluster(cid) is None:
-                    await mgr.add_cluster({"id": cid, **body})
-                else:  # idempotent re-run / Monitor Node recreated with the same Manager DB
-                    await mgr.update_cluster(cid, {"id": cid, **body})
+        # Manager checks every node's Agent on :10001 before accepting the Cluster. A node
+        # serves CQL a few seconds before its Agent starts (seen on AWS), so retry that case.
+        attempts = REGISTER_ATTEMPTS
+        while True:
+            try:
+                cid = await self._add_or_update_cluster(infra, loc.cluster_id, body)
+                break
+            except ManagerError as e:
+                attempts -= 1
+                if "connectivity check" not in str(e) or attempts <= 0:
+                    raise
+                await log("Scylla Manager cannot reach every Agent yet, retrying")
+                await self._sleep(self.poll_interval)
         await log(f"registered {name} in Scylla Manager as {cid} (host {host})")
         return cid
+
+    async def _add_or_update_cluster(
+        self, infra: ClusterInfra, cluster_id: str | None, body: JSON
+    ) -> str:
+        async with self._manager(infra) as mgr:
+            if cluster_id is None:
+                return await mgr.add_cluster(body)
+            cid = manager_cluster_uuid(cluster_id)
+            if await mgr.get_cluster(cid) is None:
+                await mgr.add_cluster({"id": cid, **body})
+            else:  # idempotent re-run / Monitor Node recreated with the same Manager DB
+                await mgr.update_cluster(cid, {"id": cid, **body})
+            return cid
 
     async def set_backup_schedule(
         self, infra: ClusterInfra, manager_cluster_id: str, interval_hours: int, retention: int

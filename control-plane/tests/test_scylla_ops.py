@@ -53,6 +53,7 @@ class FakeWorld:
     # task_id -> list of statuses returned on successive polls (None = 404 / no run yet)
     runs: dict[str, list[str | None]] = field(default_factory=dict)
     started: list[str] = field(default_factory=list)
+    agent_refusals: int = 0  # POST /clusters fails the Agent connectivity check N times
     run_script: list[str | None] = field(default_factory=lambda: [None, "RUNNING", "DONE"])
     down: set[str] = field(default_factory=set)  # Scylla nodes not answering REST
     gossip_down: set[str] = field(default_factory=set)
@@ -75,6 +76,10 @@ class FakeWorld:
         parts = path.strip("/").split("/")
         if path == "/version":
             return httpx.Response(200, json={"version": "3.13.0"})
+        if path == "/clusters" and method == "POST" and self.agent_refusals > 0:
+            self.agent_refusals -= 1
+            msg = "create cluster: connectivity check: 10.0.0.3: dial tcp 10.0.0.3:10001: refused"
+            return httpx.Response(500, json={"message": msg})
         if path == "/clusters" and method == "POST":
             cid = body.get("id") or "generated-id"
             self.clusters[cid] = body
@@ -222,6 +227,19 @@ async def test_register_creates_then_updates_with_deterministic_id(world: FakeWo
         "GET",
         "PUT",
     ]
+
+
+async def test_register_retries_until_every_agent_is_up(world: FakeWorld) -> None:
+    """Seen on AWS: a node served CQL before its Manager Agent listened on :10001."""
+    world.agent_refusals = 2
+    lines: list[str] = []
+
+    async def log(m: str) -> None:
+        lines.append(m)
+
+    mid = await make_ops(world).register_in_manager(make_infra(), "demo", log)
+    assert mid in world.clusters
+    assert sum("retrying" in line for line in lines) == 2
 
 
 async def test_register_waits_for_manager(world: FakeWorld) -> None:
