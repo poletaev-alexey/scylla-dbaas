@@ -187,3 +187,39 @@ async def test_scheduled_backups_are_discovered_and_purges_mirrored(env: Env) ->
     await env.health.sync_backups_once()
     backups = (await env.client.get(f"/api/v1/clusters/{cid}/backups")).json()
     assert backups[0]["status"] == "deleted"
+
+
+async def test_restart_does_not_leave_cluster_in_transitional_state(env: Env) -> None:
+    """Found on the first AWS run: after a restart the Operation was failed but the
+    Cluster stayed `provisioning` forever."""
+    from dbaas.domain import ClusterStatus, OperationStatus, OperationType
+    from dbaas.models import Cluster, Operation
+
+    cid = await env.create_cluster("half-built")
+    other = await env.create_cluster("mid-recovery")
+    async with env.runner.sessions() as s:
+        for c_id, c_status, op_type in (
+            (cid, ClusterStatus.PROVISIONING, OperationType.CREATE_CLUSTER),
+            (other, ClusterStatus.RECOVERING, OperationType.REPLACE_NODE),
+        ):
+            c = await s.get(Cluster, c_id)
+            assert c is not None
+            c.status = c_status
+            s.add(
+                Operation(
+                    id=f"op-stale-{c_id}",
+                    cluster_id=c_id,
+                    type=op_type,
+                    status=OperationStatus.RUNNING,
+                    actor="alice",
+                    params={},
+                )
+            )
+        await s.commit()
+
+    await env.runner.recover_after_restart()
+
+    assert (await env.client.get(f"/api/v1/clusters/{cid}")).json()["status"] == "failed"
+    assert (await env.client.get(f"/api/v1/clusters/{other}")).json()["status"] == "degraded"
+    op = (await env.client.get(f"/api/v1/operations/op-stale-{cid}")).json()
+    assert op["status"] == "failed"

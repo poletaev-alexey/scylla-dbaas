@@ -21,10 +21,11 @@ from dbaas.domain import (
     PREEMPTIBLE_BY_RECOVERY,
     SYSTEM_ACTOR,
     AuditResult,
+    ClusterStatus,
     OperationStatus,
     OperationType,
 )
-from dbaas.models import Operation, OperationLogEntry, utcnow
+from dbaas.models import Cluster, Operation, OperationLogEntry, utcnow
 from dbaas.providers.base import Provider, StepLog
 
 log = structlog.get_logger("operations")
@@ -92,6 +93,15 @@ class OperationRunner:
                     target_id=op.id,
                     result=AuditResult.FAILED,
                 )
+                # The Cluster must not stay in a transitional state nobody will finish:
+                # half-built or half-deleted -> Failed (delete is still allowed);
+                # interrupted recovery -> Degraded, so the health checker tries again.
+                cluster = await s.get(Cluster, op.cluster_id) if op.cluster_id else None
+                if cluster is not None:
+                    if cluster.status in (ClusterStatus.PROVISIONING, ClusterStatus.DELETING):
+                        cluster.status = ClusterStatus.FAILED
+                    elif cluster.status is ClusterStatus.RECOVERING:
+                        cluster.status = ClusterStatus.DEGRADED
             await s.commit()
 
     async def submit(
