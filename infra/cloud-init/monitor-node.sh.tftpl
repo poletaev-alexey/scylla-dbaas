@@ -24,7 +24,7 @@ systemctl enable --now docker
 # --- Scylla Manager ------------------------------------------------------------------------
 # https://manager.docs.scylladb.com/stable/docker/index.html
 # https://manager.docs.scylladb.com/stable/config/scylla-manager-config.html
-mkdir -p /etc/scylla-manager /var/lib/scylla-manager-db
+mkdir -p /etc/scylla-manager
 cat > /etc/scylla-manager/scylla-manager.yaml <<'EOF'
 http: 0.0.0.0:5080
 prometheus: ':5090'
@@ -35,8 +35,10 @@ EOF
 docker network create scylla-manager || true
 retry 5 docker pull "scylladb/scylla:${scylla_version}"
 retry 5 docker pull "scylladb/scylla-manager:${manager_version}"
+# Named volume, not a bind mount: the image runs as uid 998 (scylla) and Docker seeds a
+# named volume with the image's ownership; a root-owned host dir fails with EACCES.
 docker run -d --name scylla-manager-db --network scylla-manager --restart unless-stopped \
-  -v /var/lib/scylla-manager-db:/var/lib/scylla \
+  -v scylla-manager-db:/var/lib/scylla \
   "scylladb/scylla:${scylla_version}" --smp 1 --memory 1G --overprovisioned 1 --developer-mode 1
 # Manager retries until its backend is up; --restart covers the first-start race.
 docker run -d --name scylla-manager --network scylla-manager --restart unless-stopped \

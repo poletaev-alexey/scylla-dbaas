@@ -59,10 +59,12 @@ retry 5 apt-get update -q
 # Pin the exact patch release: a replacing node must run the same release as its peers.
 PKG_VERSION=$(apt-cache madison scylla | awk '{print $3}' | grep "^$SCYLLA_VERSION-" | head -n1)
 [ -n "$PKG_VERSION" ] || { echo "scylla $SCYLLA_VERSION not found in repo"; exit 1; }
+# scylla-node-exporter is versioned independently (e.g. 1:1.12.1-1), so it is not pinned.
 retry 3 apt-get install -y -q \
   scylla="$PKG_VERSION" scylla-server="$PKG_VERSION" scylla-kernel-conf="$PKG_VERSION" \
-  scylla-node-exporter="$PKG_VERSION" scylla-conf="$PKG_VERSION" scylla-python3="$PKG_VERSION"
-apt-mark hold scylla scylla-server scylla-kernel-conf scylla-node-exporter scylla-conf scylla-python3
+  scylla-conf="$PKG_VERSION" scylla-python3="$PKG_VERSION" scylla-cqlsh="$PKG_VERSION" \
+  scylla-node-exporter
+apt-mark hold scylla scylla-server scylla-kernel-conf scylla-conf scylla-python3 scylla-cqlsh
 retry 3 apt-get install -y -q scylla-manager-agent
 
 # --- scylla.yaml ---------------------------------------------------------------------------
