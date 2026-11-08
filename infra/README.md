@@ -64,7 +64,7 @@ list, finds no peers and bootstraps a **new single-node cluster**. How it is han
    targets, the Loki address and the hosts Scylla Manager knows never go stale, and seed IPs
    are known before any instance exists (no instance-to-instance dependency, which `for_each`
    could not express anyway).
-2. **Seeds on first creation** are the ENI IPs of `data-1` and `data-2`. Nodes join one at a
+2. **Seed on first creation** is the ENI IP of `data-1` only (listing `data-2` too deadlocks Raft group 0 discovery, because `data-2` waits for `data-1`). Nodes join one at a
    time: `data-2` waits for `data-1` to serve CQL, `data-3` waits for both.
 3. **A replacing node never lists itself as a seed.** When `replace_node_host_ids` names a
    node, its user_data gets seeds = the two *other* Data Nodes and

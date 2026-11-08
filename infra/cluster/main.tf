@@ -15,8 +15,11 @@ locals {
 
   subnet_ids = [for az in sort(keys(local.subnet_by_az)) : local.subnet_by_az[az]]
 
-  data_ips   = { for n, _ in local.data_nodes : n => aws_network_interface.node[n].private_ip }
-  seed_names = ["data-1", "data-2"]
+  data_ips = { for n, _ in local.data_nodes : n => aws_network_interface.node[n].private_ip }
+  # Only data-1 on first creation. With Raft topology a starting node waits to reach every
+  # listed seed before group 0 exists; data-2 starts only after data-1 serves CQL, so
+  # listing both deadlocked the first AWS run (data-1 stuck in STARTING).
+  seed_names = ["data-1"]
   monitor_ip = aws_network_interface.node["monitor"].private_ip
 
   secret_name = "dbaas/${var.cluster_id}/cql"
