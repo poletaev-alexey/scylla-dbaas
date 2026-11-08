@@ -130,6 +130,18 @@ resource "aws_eip" "node" {
   tags              = { Name = "dbaas-${var.cluster_id}-${each.key}", "dbaas:node" = each.key }
 }
 
+# Nodes advertise their public EIP as broadcast_rpc_address (so the operator's CQL client can
+# reach them). Drivers inside the Cluster, e.g. Scylla Manager on the Monitor Node, learn those
+# addresses from system.peers and connect through the IGW; that traffic arrives from the
+# sender's EIP, which the SG-reference rule above does not match. Allow the Cluster's own EIPs.
+resource "aws_vpc_security_group_ingress_rule" "own_public_ips" {
+  for_each          = local.all_nodes
+  security_group_id = aws_security_group.cluster.id
+  description       = "hairpin traffic from the public IP of ${each.key}"
+  cidr_ipv4         = "${aws_eip.node[each.key].public_ip}/32"
+  ip_protocol       = "-1"
+}
+
 # --- Credentials ----------------------------------------------------------------------------
 
 resource "random_password" "cql" {
