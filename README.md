@@ -40,7 +40,7 @@ Scylla Manager 3.13.0 / Scylla Monitoring 4.16.3, driven only through the public
 | `local` Docker driver | ✅ ran | integration test: create → write → Backup → delete → Restore → verify → delete, passes in ~90 s |
 | Control Plane, Operations, 409s, restart recovery | ✅ runs | 57 unit/lifecycle tests; ruff + mypy --strict clean |
 | UI (6 screens) | ✅ runs | lint, typecheck, build; clicked through against the fake Provider (not yet against AWS) |
-| CI workflows | ⚠️ not run on GitHub | `actionlint` clean; no GitHub remote yet |
+| CI on GitHub Actions | ✅ green | control-plane, cql-client, ui, terraform, and both Docker images build; the Docker `integration` job and `aws-e2e` are manual (`workflow_dispatch`) |
 | Rolling restart on AWS | ⚠️ not run | unit-tested (drain → restart over SSM → wait UN, one node at a time) |
 
 Getting there took five Cluster creations on AWS and three integration runs on Docker; each
