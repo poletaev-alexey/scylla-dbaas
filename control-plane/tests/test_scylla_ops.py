@@ -52,6 +52,7 @@ class FakeWorld:
     tasks: dict[str, dict[str, Any]] = field(default_factory=dict)
     # task_id -> list of statuses returned on successive polls (None = 404 / no run yet)
     runs: dict[str, list[str | None]] = field(default_factory=dict)
+    started: list[str] = field(default_factory=list)
     run_script: list[str | None] = field(default_factory=lambda: [None, "RUNNING", "DONE"])
     down: set[str] = field(default_factory=set)  # Scylla nodes not answering REST
     gossip_down: set[str] = field(default_factory=set)
@@ -101,6 +102,9 @@ class FakeWorld:
             return httpx.Response(
                 201, headers={"Location": f"/api/v1/cluster/{parts[1]}/task/{body['type']}/{tid}"}
             )
+        if parts[0] == "cluster" and parts[2] == "task" and parts[-1] == "start":
+            self.started.append(parts[4])
+            return httpx.Response(200)
         if parts[0] == "cluster" and parts[2] == "task" and len(parts) == 5:  # PUT update
             self.tasks[parts[4]] = {"id": parts[4], **body}
             return httpx.Response(200)
@@ -251,7 +255,8 @@ async def test_backup_runs_task_and_returns_snapshot(world: FakeWorld) -> None:
     task = world.tasks["t1"]
     assert task["type"] == "backup"
     assert task["properties"]["location"] == ["s3:dbaas-backups"]
-    assert "start_date" in task["schedule"]
+    assert "start_date" not in task["schedule"]  # never relies on a one-shot start_date
+    assert world.started == ["t1"]
     assert any("RUNNING" in line for line in lines)
 
 

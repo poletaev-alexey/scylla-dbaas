@@ -53,6 +53,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 
 MINIO_CONTAINER = "dbaas-minio"
 MINIO_NETWORK = "dbaas-s3"
+# Room for ~45 single-shard Scylla nodes; Scylla needs ~22k AIO slots per shard plus reserve.
+AIO_MAX_NR = 1048576
 MINIO_VOLUME = "dbaas-minio-data"
 LABEL_CLUSTER = "dbaas.cluster"
 LABEL_NODE = "dbaas.node"
@@ -230,6 +232,10 @@ class LocalInfrastructure:
                     "-",
                     stdin=dockerfile,
                 )
+            # Each Scylla shard reserves ~22k AIO slots and fs.aio-max-nr is a kernel-wide
+            # limit. Docker Desktop's VM ships 65536, so the third Data Node fails with
+            # "does not satisfy minimum AIO requirements". Raise it in the Docker VM.
+            await self._ensure_aio_limit(log)
             if not await self._exists("network", MINIO_NETWORK):
                 await self.docker("network", "create", MINIO_NETWORK)
             if not await self._exists("container", MINIO_CONTAINER):
@@ -252,6 +258,20 @@ class LocalInfrastructure:
                 if attempt == 29:
                     raise DockerError(f"cannot create bucket {self.s.bucket}: {res.err}")
                 await self._sleep(2)
+
+    async def _ensure_aio_limit(self, log: StepLog) -> None:
+        script = (
+            f'[ "$(cat /proc/sys/fs/aio-max-nr)" -ge {AIO_MAX_NR} ] && exit 0; '
+            f"echo {AIO_MAX_NR} > /proc/sys/fs/aio-max-nr && echo raised"
+        )
+        res = await self.docker(
+            "run", "--rm", "--privileged", "--user", "root", "--entrypoint", "sh",
+            self.s.node_image, "-c", script, check=False,
+        )  # fmt: skip
+        if res.rc != 0:
+            await log(f"warning: cannot raise fs.aio-max-nr in the Docker VM: {res.err.strip()}")
+        elif "raised" in res.out:
+            await log(f"raised fs.aio-max-nr to {AIO_MAX_NR} in the Docker VM")
 
     async def _mc(self, *args: str) -> DockerResult:
         host = f"http://{self.s.minio_user}:{self.s.minio_password}@{MINIO_CONTAINER}:9000"

@@ -312,10 +312,13 @@ class ManagerClusterOps:
                 task_type,
                 name=name,
                 properties=properties,
-                # A start date with no cron/interval is a one-shot run (legacy trigger);
-                # this is what `sctool backup/restore/repair` does by default.
-                schedule={"start_date": utc_now_iso(), "num_retries": 0},
+                # No cron/interval/start_date: the task never fires on its own. It is started
+                # explicitly below. Manager 3.13 silently drops a one-shot start_date that is
+                # already in the past when the scheduler sees it ("no activations scheduled"),
+                # so start_date=now left Backups stuck in NEW (found by the local e2e test).
+                schedule={"num_retries": 0},
             )
+            await mgr.start_task(ref)
             await log(f"Manager {task_type} task {ref.task_id} started")
 
             async def on_progress(data: JSON) -> None:

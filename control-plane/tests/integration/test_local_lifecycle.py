@@ -105,7 +105,7 @@ async def test_create_backup_delete_restore(api: Api) -> None:
         backup_id = backups[0]["id"]
 
         # 3. delete the source Cluster; the Backup must survive it
-        await api.run("DELETE", f"/clusters/{src}")
+        await api.run("DELETE", f"/clusters/{src}", params={"confirm": "it-source"})
         created.remove(src)
         assert (await api.call("GET", f"/backups/{backup_id}"))["status"] == "done"
 
@@ -121,7 +121,7 @@ async def test_create_backup_delete_restore(api: Api) -> None:
             assert v in out, f"row {i} missing after Restore:\n{out}"
 
         # 5. clean up through the API, including the Backups
-        await api.run("DELETE", f"/clusters/{dst}")
+        await api.run("DELETE", f"/clusters/{dst}", params={"confirm": "it-restored"})
         created.remove(dst)
         await api.run("DELETE", f"/clusters/{src}/backups")
     finally:
