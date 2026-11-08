@@ -21,6 +21,8 @@ import httpx
 
 JSON = dict[str, Any]
 
+CLUSTER_WRITE_TIMEOUT = 180.0
+
 # TaskRun.status values (pkg/service/scheduler/model.go).
 RUN_DONE = "DONE"
 RUN_FAILED = frozenset({"ERROR", "ABORTED", "STOPPED"})
@@ -80,8 +82,10 @@ class ManagerClient:
         json: Any = None,
         params: Mapping[str, Any] | None = None,
         ok: tuple[int, ...] = (200, 201, 204),
+        read_timeout: float | None = None,
     ) -> httpx.Response:
-        r = await self._http.request(method, path, json=json, params=params)
+        extra: dict[str, Any] = {} if read_timeout is None else {"timeout": read_timeout}
+        r = await self._http.request(method, path, json=json, params=params, **extra)
         if r.status_code not in ok:
             raise ManagerError(f"{method} {path} -> {r.status_code}: {r.text.strip()[:500]}")
         return r
@@ -97,11 +101,15 @@ class ManagerClient:
         return None if r.status_code == 404 else cast(JSON, r.json())
 
     async def add_cluster(self, body: JSON) -> str:
-        r = await self._request("POST", "/clusters", json=body)
+        # Manager probes every node's Agent (with its own retries) before answering;
+        # on AWS that took longer than the 30 s default.
+        r = await self._request("POST", "/clusters", json=body, read_timeout=CLUSTER_WRITE_TIMEOUT)
         return _id_from_location(r)
 
     async def update_cluster(self, cluster_id: str, body: JSON) -> None:
-        await self._request("PUT", f"/cluster/{cluster_id}", json=body)
+        await self._request(
+            "PUT", f"/cluster/{cluster_id}", json=body, read_timeout=CLUSTER_WRITE_TIMEOUT
+        )
 
     async def cluster_status(self, cluster_id: str) -> list[JSON]:
         r = await self._request("GET", f"/cluster/{cluster_id}/status")

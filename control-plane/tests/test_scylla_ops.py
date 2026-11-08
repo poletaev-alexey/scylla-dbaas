@@ -53,6 +53,7 @@ class FakeWorld:
     # task_id -> list of statuses returned on successive polls (None = 404 / no run yet)
     runs: dict[str, list[str | None]] = field(default_factory=dict)
     started: list[str] = field(default_factory=list)
+    post_timeouts: int = 0  # POST /clusters registers, then times out N times
     agent_refusals: int = 0  # POST /clusters fails the Agent connectivity check N times
     run_script: list[str | None] = field(default_factory=lambda: [None, "RUNNING", "DONE"])
     down: set[str] = field(default_factory=set)  # Scylla nodes not answering REST
@@ -76,6 +77,10 @@ class FakeWorld:
         parts = path.strip("/").split("/")
         if path == "/version":
             return httpx.Response(200, json={"version": "3.13.0"})
+        if path == "/clusters" and method == "POST" and self.post_timeouts > 0:
+            self.post_timeouts -= 1
+            self.clusters[body["id"]] = body  # Manager registered it; the client gave up
+            raise httpx.ReadTimeout("timed out")
         if path == "/clusters" and method == "POST" and self.agent_refusals > 0:
             self.agent_refusals -= 1
             msg = "create cluster: connectivity check: 10.0.0.3: dial tcp 10.0.0.3:10001: refused"
@@ -475,3 +480,12 @@ async def test_list_snapshots_dedupes_and_keeps_control_plane_location(world: Fa
     assert all(x.location == infra.backup_location for x in snaps)
     method, url, _ = world.requests[-1]
     assert method == "GET" and url.endswith("/cluster/mgr-1/backups")
+
+
+async def test_register_survives_a_timed_out_post(world: FakeWorld) -> None:
+    """Seen on AWS: Manager registered the Cluster but answered after the client timeout."""
+    world.post_timeouts = 1
+    mid = await make_ops(world).register_in_manager(make_infra(), "demo", nolog)
+    assert mid == manager_cluster_uuid("c-1234")
+    methods = [r[0] for r in world.requests if r[1].endswith(f"/cluster/{mid}")]
+    assert methods[-1] == "PUT"  # the retry found it and updated instead of duplicating

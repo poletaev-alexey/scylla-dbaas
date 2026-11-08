@@ -258,9 +258,12 @@ class ManagerClusterOps:
             try:
                 cid = await self._add_or_update_cluster(infra, loc.cluster_id, body)
                 break
-            except ManagerError as e:
+            except (ManagerError, httpx.TimeoutException) as e:
+                # A timed-out POST may still have registered the Cluster; the retry finds it
+                # by its deterministic id and updates it instead.
                 attempts -= 1
-                if "connectivity check" not in str(e) or attempts <= 0:
+                retryable = isinstance(e, httpx.TimeoutException) or "connectivity check" in str(e)
+                if not retryable or attempts <= 0:
                     raise
                 await log("Scylla Manager cannot reach every Agent yet, retrying")
                 await self._sleep(self.poll_interval)
