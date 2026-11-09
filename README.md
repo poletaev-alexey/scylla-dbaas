@@ -49,15 +49,24 @@ Scylla Manager 3.13.0 / Scylla Monitoring 4.16.3, driven only through the public
 | Cleanup | ✅ ran | Cluster delete + Backup delete leave 0 instances, EIPs, ENIs, secrets, backup objects |
 | `local` Docker driver | ✅ ran | integration test: create → write → Backup → delete → Restore → verify → delete, passes in ~90 s |
 | Control Plane, Operations, 409s, restart recovery | ✅ runs | 57 unit/lifecycle tests; ruff + mypy --strict clean |
-| UI (6 screens) | ✅ runs | lint, typecheck, build; clicked through against the fake Provider (not yet against AWS) |
+| UI (6 screens) | ✅ ran on AWS | Cluster list, detail (nodes, Backups, schedule, Operations), Operations, Backups, Audit log against a real AWS Cluster on 9 Nov — [screenshots](docs/screenshots/) |
 | CI on GitHub Actions | ✅ green | control-plane, cql-client, ui, terraform, and both Docker images build; the Docker `integration` job and `aws-e2e` are manual (`workflow_dispatch`) |
-| Rolling restart on AWS | ⚠️ not run | unit-tested (drain → restart over SSM → wait UN, one node at a time) |
+| Rolling restart | ✅ ran on AWS | drain → restart over SSM → wait UN, one node at a time; the client kept reading (12/12 verifications passed during the restart); Grafana's `restart` alert fired for exactly the 3 nodes |
 
 Getting there took five Cluster creations on AWS and three integration runs on Docker; each
 found a bug that mocks and static checks had missed (ten in total, e.g. a seed-list deadlock
 under Raft topology, a Manager one-shot task that never starts, a security-group rule missing
 for hairpin traffic). All are listed with cause and fix in
 [`docs/ai-process/mistakes.md`](docs/ai-process/mistakes.md) (#8–#18).
+
+### Screenshots (real AWS Cluster, 9 November 2026)
+
+| | |
+|---|---|
+| ![Cluster detail](docs/screenshots/cluster_detail.png) | ![Grafana overview under CQL load, rolling restart marked](docs/screenshots/grafana_overview.png) |
+| Cluster detail: 4 EC2 nodes, Backup, Operations | Grafana (Scylla Monitoring): 566 writes/s from `cql-client`; the red band is the rolling restart |
+
+More: [Clusters](docs/screenshots/clusters.png) · [Operations](docs/screenshots/operations.png) · [Backups](docs/screenshots/backups.png) · [Audit log (two days of real history, failures included)](docs/screenshots/audit.png)
 
 ## Quickstart (no cloud, no Docker)
 

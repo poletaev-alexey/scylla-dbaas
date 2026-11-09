@@ -4,14 +4,14 @@
 <h2 style="font-size:64px;font-weight:600;line-height:1.1">Ran end to end on real AWS</h2>
 </div>
 <table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
-<tr><th style="width:34%">Step</th><th style="width:66%">Result on AWS, 8 Nov 2026</th></tr>
+<tr><th style="width:34%">Step</th><th style="width:66%">Result on AWS, 8–9 Nov 2026</th></tr>
 <tr><td>Create Cluster</td><td>Healthy with no manual step; Restore Cluster in 5 min</td></tr>
 <tr><td>CQL from laptop</td><td>1000 rows, RF=3 QUORUM, 0 mismatched</td></tr>
 <tr><td>Monitoring</td><td>8 Grafana dashboards, 12/12 Prometheus targets up</td></tr>
 <tr><td>Kill a Data Node</td><td>Degraded in 6 s → replaced by system → Healthy in 7 min, same IP</td></tr>
 <tr><td>Backup → Restore</td><td>Source deleted, Backup kept, 1000/1000 rows restored</td></tr>
-<tr><td>Cleanup</td><td>0 instances, EIPs, ENIs, secrets left</td></tr>
-<tr><td>Not yet run</td><td>CI on GitHub, rolling restart on AWS</td></tr>
+<tr><td>Rolling restart, UI</td><td>Reads never failed; all 6 UI screens on the real Cluster</td></tr>
+<tr><td>CI on GitHub</td><td>Green: tests, lint, Terraform, both Docker images</td></tr>
 </table>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 12</p>
 <aside>Before this run the honest headline was "everything is built, not everything has run". Five Cluster creations on AWS and three Docker runs later, the full 10-step demo passes through the public API only. Docker local driver also passes its integration test in about 90 seconds.</aside>

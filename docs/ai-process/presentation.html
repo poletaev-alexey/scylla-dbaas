@@ -213,11 +213,11 @@
 <div style="display:flex;flex-direction:column;gap:8px;background:#0F1B2D;padding:28px;border:1px solid #0F1B2D;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">09</p><p style="font-size:26px;line-height:1.35;color:#F5F4EF">verify: all rows back</p></div>
 <div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">10</p><p style="font-size:26px;line-height:1.35">Audit log tells the story</p></div>
 </div>
-<p style="font-size:26px;color:#3B4757;line-height:1.4">Recorded on video as a fallback for the live interview. Every step is also an API call, scripted in <b>dbaas-e2e</b>.</p>
+<p style="font-size:26px;color:#3B4757;line-height:1.4">Ran end to end on AWS. Every step is also an API call, scripted in <b>dbaas-e2e</b>.</p>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 10</p>
 
 </section>
-<div class="notes">Status at the time of writing: the same scenario passes at API level on the fake Provider; the real AWS run is still pending AWS credentials.</div></div>
+<div class="notes">Done on real AWS on 8 November through the public API (and again via the UI on 9 November): 1000 rows, a terminated Data Node replaced automatically with the same IP, Backup, delete, Restore into a new Cluster with all rows back, and an audit log that tells the whole story. Screenshots are in docs/screenshots.</div></div>
 <div class="frame" data-n="11"><section id="agents" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
 <div style="display:flex;flex-direction:column;gap:16px">
 <p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Human + machines</p>
@@ -244,14 +244,14 @@
 <h2 style="font-size:64px;font-weight:600;line-height:1.1">Ran end to end on real AWS</h2>
 </div>
 <table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
-<tr><th style="width:34%">Step</th><th style="width:66%">Result on AWS, 8 Nov 2026</th></tr>
+<tr><th style="width:34%">Step</th><th style="width:66%">Result on AWS, 8–9 Nov 2026</th></tr>
 <tr><td>Create Cluster</td><td>Healthy with no manual step; Restore Cluster in 5 min</td></tr>
 <tr><td>CQL from laptop</td><td>1000 rows, RF=3 QUORUM, 0 mismatched</td></tr>
 <tr><td>Monitoring</td><td>8 Grafana dashboards, 12/12 Prometheus targets up</td></tr>
 <tr><td>Kill a Data Node</td><td>Degraded in 6 s → replaced by system → Healthy in 7 min, same IP</td></tr>
 <tr><td>Backup → Restore</td><td>Source deleted, Backup kept, 1000/1000 rows restored</td></tr>
-<tr><td>Cleanup</td><td>0 instances, EIPs, ENIs, secrets left</td></tr>
-<tr><td>Not yet run</td><td>CI on GitHub, rolling restart on AWS</td></tr>
+<tr><td>Rolling restart, UI</td><td>Reads never failed; all 6 UI screens on the real Cluster</td></tr>
+<tr><td>CI on GitHub</td><td>Green: tests, lint, Terraform, both Docker images</td></tr>
 </table>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 12</p>
 
@@ -296,16 +296,16 @@
 <div class="notes">Each shortcut is either an ADR or listed under Known limitations in the README. They were chosen to put the 2–3 days into the parts the brief grades: lifecycle, recovery, Backups, observability and the human/AI workflow.</div></div>
 <div class="frame" data-n="15"><section id="next" data-transition="fade" style="background:#0F1B2D;color:#F5F4EF;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:center;gap:56px">
 <p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF;letter-spacing:2px;text-transform:uppercase">What is left</p>
-<h2 style="font-size:88px;font-weight:600;line-height:1.05;color:#F5F4EF">Close the last gaps</h2>
+<h2 style="font-size:88px;font-weight:600;line-height:1.05;color:#F5F4EF">Next steps toward production</h2>
 <div style="display:flex;gap:24px">
-<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">GitHub CI</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Push, get CI green, run aws-e2e once</p></div>
-<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">Rolling restart</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Unit-tested; run it once on AWS</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">aws-e2e in CI</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Needs a GitHub OIDC role in AWS</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">Private networking</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Drop public IPs, TLS, PrivateLink</p></div>
 <div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">Baked AMI</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Cut Node Replacement below 7 min</p></div>
 </div>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#AFC0D3">Scylla DBaaS · 15</p>
 
 </section>
-<div class="notes">The core demo is done on real AWS. What remains is CI on GitHub (needs a remote), one AWS run of rolling restart, and the first production improvement: a baked AMI so replacement does not reinstall packages at boot.</div></div>
+<div class="notes">Everything in the brief has run on real AWS and CI is green. Not done: the manual aws-e2e workflow (it needs a GitHub OIDC role in the AWS account). The first production steps would be a baked AMI so Node Replacement does not reinstall packages, and private networking with TLS instead of public IPs and an allowlist.</div></div>
 <div class="hud" id="hud"></div>
 <script>
   const frames = [...document.querySelectorAll('.frame')];

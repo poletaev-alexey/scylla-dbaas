@@ -15,7 +15,7 @@
 <div style="display:flex;flex-direction:column;gap:8px;background:#0F1B2D;padding:28px;border:1px solid #0F1B2D;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">09</p><p style="font-size:26px;line-height:1.35;color:#F5F4EF">verify: all rows back</p></div>
 <div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">10</p><p style="font-size:26px;line-height:1.35">Audit log tells the story</p></div>
 </div>
-<p style="font-size:26px;color:#3B4757;line-height:1.4">Recorded on video as a fallback for the live interview. Every step is also an API call, scripted in <b>dbaas-e2e</b>.</p>
+<p style="font-size:26px;color:#3B4757;line-height:1.4">Ran end to end on AWS. Every step is also an API call, scripted in <b>dbaas-e2e</b>.</p>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 10</p>
-<aside>Status at the time of writing: the same scenario passes at API level on the fake Provider; the real AWS run is still pending AWS credentials.</aside>
+<aside>Done on real AWS on 8 November through the public API (and again via the UI on 9 November): 1000 rows, a terminated Data Node replaced automatically with the same IP, Backup, delete, Restore into a new Cluster with all rows back, and an audit log that tells the whole story. Screenshots are in docs/screenshots.</aside>
 </section>
