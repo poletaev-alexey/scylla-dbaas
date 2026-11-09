@@ -11,3 +11,8 @@
 - Accepted with documentation (not fixed): Scylla REST :10000 reachable from operator CIDR without auth (ADR-0004 scope); 4 Elastic IPs per Cluster (quota 5/region); AWS CLI via snap on nodes adds boot time.
 - **2026-11-06** – Scheduled-Backup sync added (gap found during planning). API smoke run on the fake Provider passed end to end. README finalised with an explicit verified / not-verified table. control-plane: 54 passed, 1 skipped.
 - **2026-11-06** – Deck finished: 15 slides (plan + retrospective). Sources in docs/ai-process/deck.
+- **2026-11-08** – Human started Docker Desktop. First real integration run on the `local` driver found 3 bugs (mistakes #8–#10); third run green: create → write → Backup → delete → Restore → verify in ~90 s.
+- **2026-11-08** – Human created the AWS account and access key, guided step by step. Claude raised the vCPU quota (5 → 16), applied `infra/base` after an explicit yes.
+- **2026-11-08** – AWS: five Cluster creations, seven AWS-only bugs found and fixed (mistakes #11–#18), each diagnosed over SSM without SSH. Then the full demo through the API: 1000 rows over CQL, Grafana (8 dashboards, 12/12 targets), terminate `data-2` → Auto-recovery by `system` → healthy in 7 min with the same IP, Backup (1480 S3 objects), delete source, Restore into a new Cluster → 1000/1000 rows, audit trail, cleanup to zero billable resources.
+- **2026-11-08** – Private GitHub repo created; first CI run failed on the Docker build context (mistake #19), fixed; CI green.
+- **2026-11-09** – Gap check against the brief: UI and rolling restart run against AWS; standalone HTML presentation (`presentation.html`, built from the deck sources by `deck/build.py`); README "For reviewers" map; `prompts.md`.

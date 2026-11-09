@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scylla DBaaS Plan</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  html, body { margin:0; height:100%; background:#0B1320; overflow:hidden; }
+  .frame { display:none; position:absolute; inset:0; }
+  .frame.on { display:block; }
+  .frame > section { position:absolute; left:50%; top:50%; width:1920px; height:1080px;
+    box-sizing:border-box; transform-origin:center; margin:0; }
+  section p, section h2, section h3, section ul { margin:0; }
+  section ul { padding-left:1.1em; }
+  section table { width:100%; border-collapse:collapse; }
+  section th { text-align:left; font-weight:600; padding:14px 18px; border-bottom:3px solid currentColor; }
+  section td { padding:14px 18px; border-bottom:1px solid rgba(15,27,45,.18); vertical-align:top; }
+  .arrow { align-self:center; width:64px; height:3px; background:#2563C9; position:relative; flex:none; }
+  .arrow::after { content:""; position:absolute; right:-2px; top:-7px; border:8px solid transparent;
+    border-left:12px solid #2563C9; border-right:0; }
+  .notes { display:none; position:fixed; left:0; right:0; bottom:0; max-height:30vh; overflow:auto;
+    background:rgba(11,19,32,.94); color:#E6EDF5; font:16px/1.5 'IBM Plex Sans', Arial, sans-serif;
+    padding:14px 20px; box-sizing:border-box; }
+  body.shownotes .frame.on .notes { display:block; }
+  .hud { position:fixed; right:12px; bottom:10px; color:#AFC0D3; font:13px 'JetBrains Mono', monospace;
+    opacity:.75; pointer-events:none; }
+  body.shownotes .hud { bottom:calc(30vh + 10px); }
+</style></head>
+<body>
+<div class="frame" data-n="1"><section id="cover" data-transition="fade" style="background:#0F1B2D;color:#F5F4EF;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:space-between">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF;letter-spacing:2px;text-transform:uppercase">ScyllaDB Cloud Engineering · Home assignment</p>
+<div style="display:flex;flex-direction:column;gap:40px">
+<h1 style="font-size:120px;font-weight:600;line-height:1.05;color:#F5F4EF">Scylla DBaaS<br>on AWS</h1>
+<p style="font-size:40px;color:#AFC0D3;line-height:1.3;width:1300px">The plan: architecture, decisions, trade-offs, and how one human and a team of AI agents build it in 2–3 days</p>
+</div>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#AFC0D3">Plan v1 · 5 November 2026 · eu-central-1</p>
+
+</section>
+<div class="notes">This deck is the output of a structured “grilling” session with Claude: every design decision was asked as a numbered question with a recommended answer, and settled before any code was written. The decisions are recorded as ADRs in docs/adr and the vocabulary in GLOSSARY.md.</div></div>
+<div class="frame" data-n="2"><section id="brief" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">The brief</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">A 3-node ScyllaDB service, operated through a UI and an API</h2>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:24px">
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">01</p><h3 style="font-size:32px;font-weight:600;line-height:1.2">Lifecycle</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Create, observe and delete a Cluster on Ubuntu 24.04 VMs</p></div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">02</p><h3 style="font-size:32px;font-weight:600;line-height:1.2">Recovery</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Detect failed components and bring the Cluster back</p></div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">03</p><h3 style="font-size:32px;font-weight:600;line-height:1.2">Backup</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Back up to object storage and restore from it</p></div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">04</p><h3 style="font-size:32px;font-weight:600;line-height:1.2">Observability</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Manager, Prometheus and Grafana on a separate VM, in Docker</p></div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">05</p><h3 style="font-size:32px;font-weight:600;line-height:1.2">Audit</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Log who did what to which Cluster, and the outcome</p></div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">06</p><h3 style="font-size:32px;font-weight:600;line-height:1.2">API + UI</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Everything in the UI is also an API call</p></div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">07</p><h3 style="font-size:32px;font-weight:600;line-height:1.2">CI</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Automated checks for code and infrastructure</p></div>
+<div style="display:flex;flex-direction:column;gap:12px;background:#0F1B2D;padding:32px;border:1px solid #0F1B2D;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">08 · graded</p><h3 style="font-size:32px;font-weight:600;line-height:1.2;color:#F5F4EF">Human + AI</h3><p style="font-size:24px;color:#AFC0D3;line-height:1.4">Prompts, plans, agent instructions, honest quality review</p></div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · Plan v1 · 02</p>
+
+</section>
+<div class="notes">Bonus item, not shown as a card: a small CQL client that writes and reads data in the created Cluster. We do it, and reuse it to verify Restore.</div></div>
+<div class="frame" data-n="3"><section id="process" data-transition="fade" style="background:#2563C9;color:#F5F4EF;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:center;gap:48px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#DCE7FA;letter-spacing:2px;text-transform:uppercase">How this plan was made</p>
+<div style="display:flex;align-items:end;gap:56px">
+<h1 style="font-size:320px;font-weight:700;line-height:0.9;color:#F5F4EF">35</h1>
+<p style="font-size:48px;line-height:1.25;color:#F5F4EF;width:1000px">decisions settled in 4 rounds of AI-led “grilling” before a single line of code</p>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#DCE7FA;width:1500px">Claude asked each question with a recommended answer; the human accepted, changed or rejected it. Results live in <b>GLOSSARY.md</b> (16 terms) and <b>docs/adr</b> (6 ADRs).</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#DCE7FA">Scylla DBaaS · Plan v1 · 03</p>
+
+</section>
+<div class="notes">Round 1: cloud, budget, where the Control Plane runs, language, timeline, multi-cluster, repo, doc language. Round 2: Terraform vs SDK, cloud-init, networking, instance types, lifecycle scope, Operation model, failure ladder, audit, API auth, UI stack. Round 3: backup location and schedule, restore target, deletion semantics, local driver, CI, in-cluster auth, CQL client, region, agent plan, AI-process docs. Round 4: Cluster states, concurrency, API resources, UI screens, definition of done, priorities.</div></div>
+<div class="frame" data-n="4"><section id="arch" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Architecture</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">A local Control Plane drives Clusters in AWS</h2>
+</div>
+<div style="display:flex;align-items:stretch;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FFFFFF;padding:36px;border:2px solid #D9DEE5;border-radius:12px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Operator laptop</p>
+<h3 style="font-size:36px;font-weight:600;line-height:1.2">Clients</h3>
+<ul style="font-size:26px;line-height:1.5;color:#3B4757"><li>Web UI (React + TS)</li><li>Any REST client</li><li>cql-client CLI</li></ul>
+</div>
+<div class="arrow" aria-hidden="true"></div>
+<div style="flex:1.2;display:flex;flex-direction:column;gap:16px;background:#0F1B2D;padding:36px;border:2px solid #0F1B2D;border-radius:12px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">docker-compose · local</p>
+<h3 style="font-size:36px;font-weight:600;line-height:1.2;color:#F5F4EF">Control Plane</h3>
+<ul style="font-size:26px;line-height:1.5;color:#AFC0D3"><li>FastAPI /api/v1 + API key</li><li>Operation worker (asyncio)</li><li>Health checker → Auto-recovery</li><li>Provider: aws | local</li><li>DB: Clusters, Operations, Audit Events</li></ul>
+</div>
+<div class="arrow" aria-hidden="true"></div>
+<div style="flex:1.2;display:flex;flex-direction:column;gap:16px;background:#FFFFFF;padding:36px;border:2px solid #2563C9;border-radius:12px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">AWS · eu-central-1</p>
+<h3 style="font-size:36px;font-weight:600;line-height:1.2">Per Cluster</h3>
+<ul style="font-size:26px;line-height:1.5;color:#3B4757"><li>Terraform state in S3</li><li>3 × Data Node, cloud-init</li><li>Monitor Node: Manager, Prometheus, Grafana, Loki</li><li>S3 Backups, Secrets Manager</li></ul>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · Plan v1 · 04</p>
+
+</section>
+<div class="notes">The Control Plane never SSHes into nodes: Terraform creates VMs, cloud-init configures them, and day-2 operations go through the Scylla Manager API and Scylla REST API. The Provider interface lets the same Control Plane run against Docker containers locally and in CI.</div></div>
+<div class="frame" data-n="5"><section id="topology" data-transition="fade" style="background:#E9EEF3;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Inside one Cluster</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Three Data Nodes store data; one Monitor Node watches them</h2>
+</div>
+<div style="display:flex;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:2px solid #2563C9;border-radius:12px"><h3 style="font-size:32px;font-weight:600">Data Node 1</h3><p style="font-size:24px;color:#3B4757">i4i.large · NVMe · ScyllaDB + manager-agent</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:2px solid #2563C9;border-radius:12px"><h3 style="font-size:32px;font-weight:600">Data Node 2</h3><p style="font-size:24px;color:#3B4757">i4i.large · NVMe · ScyllaDB + manager-agent</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:2px solid #2563C9;border-radius:12px"><h3 style="font-size:32px;font-weight:600">Data Node 3</h3><p style="font-size:24px;color:#3B4757">i4i.large · NVMe · ScyllaDB + manager-agent</p></div>
+</div>
+<div style="display:flex;gap:24px">
+<div style="flex:2;display:flex;flex-direction:column;gap:10px;background:#0F1B2D;padding:32px;border-radius:12px"><h3 style="font-size:32px;font-weight:600;color:#F5F4EF">Monitor Node · t3.xlarge · Docker</h3><p style="font-size:24px;color:#AFC0D3">Scylla Manager (backup, repair) · Prometheus · Grafana · Loki — stores no data</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:2px dashed #5B6675;border-radius:12px"><h3 style="font-size:32px;font-weight:600">S3 bucket</h3><p style="font-size:24px;color:#3B4757">clusters/&lt;id&gt;/ · SSE · 30-day lifecycle</p></div>
+</div>
+<p style="font-size:26px;color:#3B4757">RF=3 + QUORUM: the Cluster keeps serving with one Data Node down. Ubuntu 24.04 everywhere; access only from the operator IP; shell via SSM.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · Plan v1 · 05</p>
+
+</section>
+<div class="notes">Open ports, operator CIDR only: 9042 CQL, 10000 Scylla REST, 3000 Grafana, 5080 Manager API. Inter-node traffic stays inside the Security Group. The Cluster password is generated at creation and stored in Secrets Manager.</div></div>
+<div class="frame" data-n="6"><section id="decisions" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Architecture decision records</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Six decisions that are hard to reverse</h2>
+</div>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
+<tr><th style="width:8%">ADR</th><th style="width:44%">Decision</th><th style="width:48%">Cost we accept</th></tr>
+<tr><td>0001</td><td>Control Plane runs locally</td><td>Clusters must be reachable from the internet</td></tr>
+<tr><td>0002</td><td>Terraform per Cluster + cloud-init</td><td>Slower than a baked AMI; subprocess calls</td></tr>
+<tr><td>0003</td><td>In-process Operation worker</td><td>Restart fails running Operations</td></tr>
+<tr><td>0004</td><td>Public subnet, IP allowlist, SSM</td><td>Not production network isolation</td></tr>
+<tr><td>0005</td><td>Restore always creates a new Cluster</td><td>Backups outlive Clusters; extra VMs</td></tr>
+<tr><td>0006</td><td>Provider with aws and local drivers</td><td>About half a day to build</td></tr>
+</table>
+<p style="font-size:26px;color:#3B4757">Also chosen: Python + FastAPI, React + TS, API key → Actor, PasswordAuthenticator, eu-central-1.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · Plan v1 · 06</p>
+
+</section>
+<div class="notes">An ADR is written only when a decision is hard to reverse, surprising without context, and the result of a real trade-off. Language and UI framework choices did not meet that bar and are listed only in the footer line.</div></div>
+<div class="frame" data-n="7"><section id="states" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Cluster status</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Degraded still serves data; Recovering fixes it</h2>
+</div>
+<div style="display:flex;align-items:center;gap:16px">
+<p style="font-size:30px;font-weight:600;background:#E9EEF3;padding:20px 32px;border-radius:999px">Provisioning</p>
+<div class="arrow" aria-hidden="true"></div>
+<p style="font-size:30px;font-weight:600;background:#2563C9;color:#F5F4EF;padding:20px 32px;border-radius:999px">Healthy</p>
+<div class="arrow" aria-hidden="true"></div>
+<p style="font-size:30px;font-weight:600;background:#F6D9C4;color:#0F1B2D;padding:20px 32px;border-radius:999px">Degraded</p>
+<div class="arrow" aria-hidden="true"></div>
+<p style="font-size:30px;font-weight:600;background:#0F1B2D;color:#F5F4EF;padding:20px 32px;border-radius:999px">Recovering → Healthy</p>
+</div>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
+<tr><th style="width:22%">Status</th><th style="width:78%">Meaning</th></tr>
+<tr><td>Healthy</td><td>All 3 Data Nodes up and serving; Monitor Node reachable</td></tr>
+<tr><td>Degraded</td><td>Serves QUORUM, but a Data Node is down or the Monitor Node is lost</td></tr>
+<tr><td>Recovering</td><td>Node Replacement or Monitor Node recreation in progress</td></tr>
+<tr><td>Failed</td><td>Creation did not complete; the only action is delete</td></tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · Plan v1 · 07</p>
+
+</section>
+<div class="notes">Edge case settled in grilling: losing only the Monitor Node makes the Cluster Degraded, not Healthy, because Backups and metrics stop even though data is fully available. Deleting and Deleted are terminal lifecycle states not shown on the diagram.</div></div>
+<div class="frame" data-n="8"><section id="ops" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Failures and Operations</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Three tiers of failure, one Operation at a time</h2>
+</div>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
+<tr><th style="width:26%">What failed</th><th style="width:44%">What happens</th><th style="width:30%">Cluster status</th></tr>
+<tr><td>Scylla process</td><td>systemd restarts it</td><td>Healthy</td></tr>
+<tr><td>Data Node VM</td><td>2-min grace, then Node Replacement + repair</td><td>Degraded → Recovering</td></tr>
+<tr><td>Monitor Node VM</td><td>Recreate, re-register in Manager</td><td>Degraded → Recovering</td></tr>
+</table>
+<div style="display:flex;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><h3 style="font-size:32px;font-weight:600">409 on conflict</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">One active Operation per Cluster; the reply names the blocker</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><h3 style="font-size:32px;font-weight:600">Recovery first</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Auto-recovery cancels a running Backup</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:1px solid #D9DEE5;border-radius:12px"><h3 style="font-size:32px;font-weight:600">Everything audited</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Requests, denials and automatic actions by “system”</p></div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 08</p>
+
+</section>
+<div class="notes">Health is judged from two views: the cloud (is the instance running?) and Scylla itself (do peers see the node as Up/Normal?). A Node Replacement keeps the node’s network interface and Elastic IP, so seeds, Prometheus targets and Manager’s host list stay valid.</div></div>
+<div class="frame" data-n="9"><section id="backup" data-transition="fade" style="background:#E9EEF3;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Backup and Restore</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Restore never touches a live Cluster</h2>
+</div>
+<div style="display:flex;align-items:stretch;gap:16px">
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:2px solid #2563C9;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">1</p><h3 style="font-size:32px;font-weight:600">Backup</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Manager: daily, keep 7, or Backup now</p></div>
+<div class="arrow" aria-hidden="true"></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:2px solid #2563C9;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">2</p><h3 style="font-size:32px;font-weight:600">S3</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">Encrypted, outlives the Cluster</p></div>
+<div class="arrow" aria-hidden="true"></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#0F1B2D;padding:32px;border:2px solid #0F1B2D;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">3</p><h3 style="font-size:32px;font-weight:600;color:#F5F4EF">Restore</h3><p style="font-size:24px;color:#AFC0D3;line-height:1.4">New Cluster: schema, then data</p></div>
+<div class="arrow" aria-hidden="true"></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;padding:32px;border:2px solid #2563C9;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">4</p><h3 style="font-size:32px;font-weight:600">Verify</h3><p style="font-size:24px;color:#3B4757;line-height:1.4">cql-client verify re-reads every row</p></div>
+</div>
+<p style="font-size:26px;color:#3B4757;line-height:1.4">Scheduled Backups are taken by Manager itself; the Control Plane mirrors them every ~5 minutes and marks retention-purged ones Deleted.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 09</p>
+
+</section>
+<div class="notes">Why a new Cluster: Scylla Manager restores schema only into an empty cluster, and restoring next to the original avoids any risk to live data (ADR-0005). The mirroring of scheduled Backups was a gap spotted during integration and added afterwards.</div></div>
+<div class="frame" data-n="10"><section id="demo" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Definition of done</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">A 10-step demo on real AWS</h2>
+</div>
+<div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:20px">
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">01</p><p style="font-size:26px;line-height:1.35">Create a Cluster in the UI</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">02</p><p style="font-size:26px;line-height:1.35">cql-client writes 1000 rows</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">03</p><p style="font-size:26px;line-height:1.35">Grafana shows the load</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">04</p><p style="font-size:26px;line-height:1.35">Terminate a Data Node</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#0F1B2D;padding:28px;border:1px solid #0F1B2D;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">05</p><p style="font-size:26px;line-height:1.35;color:#F5F4EF">Auto-recovery → Healthy</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">06</p><p style="font-size:26px;line-height:1.35">Backup now</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">07</p><p style="font-size:26px;line-height:1.35">Delete the Cluster</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">08</p><p style="font-size:26px;line-height:1.35">Restore into a new one</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#0F1B2D;padding:28px;border:1px solid #0F1B2D;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF">09</p><p style="font-size:26px;line-height:1.35;color:#F5F4EF">verify: all rows back</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">10</p><p style="font-size:26px;line-height:1.35">Audit log tells the story</p></div>
+</div>
+<p style="font-size:26px;color:#3B4757;line-height:1.4">Recorded on video as a fallback for the live interview. Every step is also an API call, scripted in <b>dbaas-e2e</b>.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 10</p>
+
+</section>
+<div class="notes">Status at the time of writing: the same scenario passes at API level on the fake Provider; the real AWS run is still pending AWS credentials.</div></div>
+<div class="frame" data-n="11"><section id="agents" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Human + machines</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Contracts first, then four agents in parallel</h2>
+</div>
+<div style="display:flex;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#2563C9;padding:28px;border-radius:12px"><h3 style="font-size:32px;font-weight:600;color:#F5F4EF">Human</h3><p style="font-size:24px;color:#F5F4EF;line-height:1.4">35 decisions in grilling, scope calls, review of the demo</p></div>
+<div style="flex:2;display:flex;flex-direction:column;gap:8px;background:#0F1B2D;padding:28px;border-radius:12px"><h3 style="font-size:32px;font-weight:600;color:#F5F4EF">Claude · orchestrator</h3><p style="font-size:24px;color:#AFC0D3;line-height:1.4">Wrote the Provider contract and Control Plane core, briefed agents, merged and verified every branch</p></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:20px">
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">infra-aws</p><p style="font-size:24px;color:#3B4757;line-height:1.4">Terraform, cloud-init, aws driver</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">scylla-ops</p><p style="font-size:24px;color:#3B4757;line-height:1.4">Manager + REST clients, local driver</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">ui</p><p style="font-size:24px;color:#3B4757;line-height:1.4">6 screens, clicked through in a browser</p></div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#FFFFFF;padding:28px;border:1px solid #D9DEE5;border-radius:12px"><p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9">ci-cql</p><p style="font-size:24px;color:#3B4757;line-height:1.4">GitHub Actions, CQL client, e2e runner</p></div>
+</div>
+<p style="font-size:26px;color:#3B4757;line-height:1.4">Each agent: own git worktree, owned paths, “don’t change the contract — report it”, verify facts in official docs. Result: zero merge conflicts.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 11</p>
+
+</section>
+<div class="notes">The exact agent briefs are in docs/ai-process/agents. The rule “implement around a contract problem and report it” paid off twice: the UI agent found two API bugs and the ops agent found a contract flaw, instead of each silently patching shared code.</div></div>
+<div class="frame" data-n="12"><section id="status" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Retrospective · quality</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Ran end to end on real AWS</h2>
+</div>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
+<tr><th style="width:34%">Step</th><th style="width:66%">Result on AWS, 8 Nov 2026</th></tr>
+<tr><td>Create Cluster</td><td>Healthy with no manual step; Restore Cluster in 5 min</td></tr>
+<tr><td>CQL from laptop</td><td>1000 rows, RF=3 QUORUM, 0 mismatched</td></tr>
+<tr><td>Monitoring</td><td>8 Grafana dashboards, 12/12 Prometheus targets up</td></tr>
+<tr><td>Kill a Data Node</td><td>Degraded in 6 s → replaced by system → Healthy in 7 min, same IP</td></tr>
+<tr><td>Backup → Restore</td><td>Source deleted, Backup kept, 1000/1000 rows restored</td></tr>
+<tr><td>Cleanup</td><td>0 instances, EIPs, ENIs, secrets left</td></tr>
+<tr><td>Not yet run</td><td>CI on GitHub, rolling restart on AWS</td></tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 12</p>
+
+</section>
+<div class="notes">Before this run the honest headline was &quot;everything is built, not everything has run&quot;. Five Cluster creations on AWS and three Docker runs later, the full 10-step demo passes through the public API only. Docker local driver also passes its integration test in about 90 seconds.</div></div>
+<div class="frame" data-n="13"><section id="mistakes" data-transition="fade" style="background:#E9EEF3;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Retrospective · where the AI was wrong</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">18 defects: mocks caught 7, reality caught 11</h2>
+</div>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
+<tr><th style="width:52%">Defect</th><th style="width:48%">Caught by</th></tr>
+<tr><td>Backup race after pre-emption</td><td>Running tests 10×, not once</td></tr>
+<tr><td>Contract bugs (timestamps, 409, URLs)</td><td>UI and ops agents, as consumers</td></tr>
+<tr><td>Manager one-shot task never starts</td><td>First Docker run with real Manager</td></tr>
+<tr><td>Seed deadlock under Raft topology</td><td>AWS run, journal over SSM</td></tr>
+<tr><td>SG blocked hairpin to public IPs</td><td>AWS run, hypothesis tested by hand</td></tr>
+<tr><td>Package pin, file perms, EIP race</td><td>AWS bootstrap logs</td></tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 13</p>
+
+</section>
+<div class="notes">Lessons: a mock encodes the author&#x27;s belief about an API, so it cannot catch a wrong belief; only the real system can. One green run proves little for async code. Consumers find contract bugs that authors miss. Full log with cause and fix for all 18 in docs/ai-process/mistakes.md.</div></div>
+<div class="frame" data-n="14"><section id="gaps" data-transition="fade" style="background:#F5F4EF;color:#0F1B2D;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#2563C9;letter-spacing:2px;text-transform:uppercase">Production differences</p>
+<h2 style="font-size:64px;font-weight:600;line-height:1.1">Shortcuts taken on purpose</h2>
+</div>
+<table style="font-family:'IBM Plex Sans', Arial, sans-serif;font-size:26px;color:#0F1B2D">
+<tr><th style="width:44%">Here</th><th style="width:56%">In production</th></tr>
+<tr><td>Control Plane on a laptop, SQLite</td><td>HA service in its own VPC, Postgres</td></tr>
+<tr><td>In-process Operation runner</td><td>Durable workflows that resume after restarts</td></tr>
+<tr><td>Public IPs + operator allowlist</td><td>Private subnets, PrivateLink or peering</td></tr>
+<tr><td>No TLS; REST :10000 open to operator</td><td>TLS everywhere, admin APIs never exposed</td></tr>
+<tr><td>API key → Actor</td><td>OIDC, RBAC, tenant isolation, quotas</td></tr>
+<tr><td>cloud-init installs at boot</td><td>Baked AMIs, faster Node Replacement</td></tr>
+<tr><td>Fixed 3 nodes, 1 Cluster per quota</td><td>Scale out/in, upgrades, multi-DC</td></tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#5B6675">Scylla DBaaS · 14</p>
+
+</section>
+<div class="notes">Each shortcut is either an ADR or listed under Known limitations in the README. They were chosen to put the 2–3 days into the parts the brief grades: lifecycle, recovery, Backups, observability and the human/AI workflow.</div></div>
+<div class="frame" data-n="15"><section id="next" data-transition="fade" style="background:#0F1B2D;color:#F5F4EF;font-family:'IBM Plex Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;justify-content:center;gap:56px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#7FB0FF;letter-spacing:2px;text-transform:uppercase">What is left</p>
+<h2 style="font-size:88px;font-weight:600;line-height:1.05;color:#F5F4EF">Close the last gaps</h2>
+<div style="display:flex;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">GitHub CI</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Push, get CI green, run aws-e2e once</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">Rolling restart</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Unit-tested; run it once on AWS</p></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;border-top:4px solid #7FB0FF;padding:24px 0px 0px 0px"><h3 style="font-size:36px;font-weight:600;color:#F5F4EF">Baked AMI</h3><p style="font-size:26px;color:#AFC0D3;line-height:1.4">Cut Node Replacement below 7 min</p></div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;color:#AFC0D3">Scylla DBaaS · 15</p>
+
+</section>
+<div class="notes">The core demo is done on real AWS. What remains is CI on GitHub (needs a remote), one AWS run of rolling restart, and the first production improvement: a baked AMI so replacement does not reinstall packages at boot.</div></div>
+<div class="hud" id="hud"></div>
+<script>
+  const frames = [...document.querySelectorAll('.frame')];
+  let i = Math.max(0, Math.min(frames.length - 1, (parseInt(location.hash.slice(1)) || 1) - 1));
+  function fit() {
+    const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    for (const sec of document.querySelectorAll('.frame > section'))
+      sec.style.transform = `translate(-50%, -50%) scale(${s})`;
+  }
+  function show(n) {
+    i = Math.max(0, Math.min(frames.length - 1, n));
+    frames.forEach((f, k) => f.classList.toggle('on', k === i));
+    history.replaceState(null, '', '#' + (i + 1));
+    document.getElementById('hud').textContent =
+      `${i + 1} / ${frames.length}  ·  ← → navigate  ·  N notes`;
+  }
+  addEventListener('keydown', e => {
+    if (['ArrowRight', 'PageDown', ' '].includes(e.key)) show(i + 1);
+    else if (['ArrowLeft', 'PageUp'].includes(e.key)) show(i - 1);
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(frames.length - 1);
+    else if (e.key.toLowerCase() === 'n') document.body.classList.toggle('shownotes');
+  });
+  addEventListener('click', e => show(e.clientX > innerWidth / 3 ? i + 1 : i - 1));
+  addEventListener('resize', fit);
+  fit(); show(i);
+</script>
+</body></html>
